@@ -10,6 +10,7 @@
  */
 import moment from 'moment';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { redisClient as redis } from '../config/redis.js';
 import {
   KarmaProfile,
@@ -258,7 +259,7 @@ export async function applyDecayToAll(): Promise<{
   for (const raw of profiles) {
     const userId = raw.userId.toString();
     const lockKey = `decay-lock:${userId}`;
-    const lockToken = `${Date.now()}-${Math.random()}`;
+    const lockToken = crypto.randomUUID();
 
     // BE-KAR-009 FIX: Acquire distributed lock (10s TTL)
     const lockAcquired = await redis.set(lockKey, lockToken, 'NX', 'EX', 10);

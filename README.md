@@ -1,6 +1,46 @@
-# Karma by ReZ — Service
+# Karma by ReZ
 
 Impact Economy Platform backend. Converts verified volunteer hours into ReZ Coins via a weekly admin-triggered batch conversion process.
+
+## Brand Identity
+
+> **"Good actions should be visible, valued, and rewarding."**
+
+Karma is: **Positive · Human · Impact-driven · Rewarding**
+Feel: **Warm + Trustworthy + Modern** — not NGO-like, not corporate-heavy
+
+### Colors
+
+| Role | Color | Hex |
+|------|-------|-----|
+| Primary (Impact / Growth) | Fresh Green | `#22C55E` |
+| Secondary (Reward / Value) | Warm Gold | `#FACC15` |
+| Trust | Sky Blue | `#3B82F6` |
+| Neutrals | Near Black / Dark Grey | `#111827` / `#374151` |
+
+### Typography
+Inter or Poppins — clean, modern, fintech-app feel. Bold headings, minimal clutter.
+
+### Voice
+Simple · Positive · Action-oriented
+
+| Instead of | Say |
+|------------|-----|
+| "Participate in CSR activities" | "Do something good today" |
+| "Earn rewards" | "Get rewarded for doing good" |
+| "Convert karma to coins" | "Turn your impact into value" |
+| "Volunteering opportunities" | "Good deeds near you" |
+
+### Tagline
+**"Do Good. Get Rewarded."**
+
+### Key Differentiation
+This is **NOT:** NGO app, donation platform, charity tracker
+This **IS:** Modern, reward-driven, lifestyle-integrated, fintech-clean
+
+> **Think: Headspace meets Robinhood.** Purpose meets reward.
+
+Full brand brief: [`docs/BRAND_IDENTITY.md`](docs/BRAND_IDENTITY.md)
 
 ## Architecture
 

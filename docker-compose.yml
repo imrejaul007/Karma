@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  rez-karma-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rez-karma-service
+    restart: unless-stopped
+    ports:
+      - '3009:3009'
+    environment:
+      - PORT=3009
+      - NODE_ENV=production
+      - SERVICE_NAME=rez-karma-service
+      - MONGODB_URI=${KARMA_MONGODB_URI:-mongodb://localhost:27017/rez_karma}
+      - REDIS_URL=${KARMA_REDIS_URL:-redis://localhost:6379}
+      - AUTH_SERVICE_URL=${KARMA_AUTH_SERVICE_URL:-http://rez-auth-service:3001}
+      - WALLET_SERVICE_URL=${KARMA_WALLET_SERVICE_URL:-http://rez-wallet-service:4004}
+      - MERCHANT_SERVICE_URL=${KARMA_MERCHANT_SERVICE_URL:-http://rez-merchant-service:3004}
+      - BATCH_CRON_SCHEDULE=${KARMA_BATCH_CRON_SCHEDULE:-59 23 * * 0}
+      - JWT_SECRET=${KARMA_JWT_SECRET:-}
+      - INTERNAL_SERVICE_TOKEN=${KARMA_INTERNAL_SERVICE_TOKEN:-}
+      - CORS_ORIGIN=${KARMA_CORS_ORIGIN:-https://rez.money}
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX=100
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3009/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - rez-gateway
+      - rez-internal
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+networks:
+  rez-gateway:
+    external: true
+  rez-internal:
+    external: true

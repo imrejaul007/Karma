@@ -1,0 +1,123 @@
+import mongoose, { Schema, Document, Model } from 'mongoose';
+import type { Level } from '../types/index';
+
+export interface KarmaProfileDocument extends Omit<IKarmaProfile, '_id'>, Document {
+  _id: mongoose.Types.ObjectId;
+}
+
+export interface IBadge {
+  id: string;
+  name: string;
+  earnedAt: Date;
+}
+
+export interface ILevelHistoryEntry {
+  level: Level;
+  earnedAt: Date;
+  droppedAt?: Date;
+}
+
+export interface IConversionHistoryEntry {
+  karmaConverted: number;
+  coinsEarned: number;
+  rate: number;
+  batchId: mongoose.Types.ObjectId;
+  convertedAt: Date;
+}
+
+export interface IKarmaProfile {
+  _id: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
+  lifetimeKarma: number;
+  activeKarma: number;
+  level: Level;
+  eventsCompleted: number;
+  eventsJoined: number;
+  totalHours: number;
+  trustScore: number;
+  badges: IBadge[];
+  lastActivityAt: Date;
+  levelHistory: ILevelHistoryEntry[];
+  conversionHistory: IConversionHistoryEntry[];
+  thisWeekKarmaEarned: number;
+  weekOfLastKarmaEarned?: Date;
+  avgEventDifficulty: number;
+  avgConfidenceScore: number;
+  checkIns: number;
+  approvedCheckIns: number;
+  activityHistory: Date[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const BadgeSchema = new Schema<IBadge>(
+  {
+    id: { type: String, required: true },
+    name: { type: String, required: true },
+    earnedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
+const LevelHistoryEntrySchema = new Schema<ILevelHistoryEntry>(
+  {
+    level: { type: String, enum: ['L1', 'L2', 'L3', 'L4'] as Level[], required: true },
+    earnedAt: { type: Date, required: true },
+    droppedAt: { type: Date },
+  },
+  { _id: false },
+);
+
+const ConversionHistoryEntrySchema = new Schema<IConversionHistoryEntry>(
+  {
+    karmaConverted: { type: Number, required: true, min: 0 },
+    coinsEarned: { type: Number, required: true, min: 0 },
+    rate: { type: Number, required: true, min: 0, max: 1 },
+    batchId: { type: Schema.Types.ObjectId, ref: 'Batch', required: true },
+    convertedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
+const KarmaProfileSchema = new Schema<KarmaProfileDocument>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    lifetimeKarma: { type: Number, default: 0, min: 0 },
+    activeKarma: { type: Number, default: 0, min: 0 },
+    level: {
+      type: String,
+      enum: ['L1', 'L2', 'L3', 'L4'] as Level[],
+      default: 'L1',
+    },
+    eventsCompleted: { type: Number, default: 0, min: 0 },
+    eventsJoined: { type: Number, default: 0, min: 0 },
+    totalHours: { type: Number, default: 0, min: 0 },
+    trustScore: { type: Number, default: 0, min: 0, max: 100 },
+    badges: { type: [BadgeSchema], default: [] },
+    lastActivityAt: { type: Date, default: null },
+    levelHistory: { type: [LevelHistoryEntrySchema], default: [] },
+    conversionHistory: { type: [ConversionHistoryEntrySchema], default: [] },
+    thisWeekKarmaEarned: { type: Number, default: 0 },
+    weekOfLastKarmaEarned: { type: Date },
+    avgEventDifficulty: { type: Number, default: 0 },
+    avgConfidenceScore: { type: Number, default: 0 },
+    checkIns: { type: Number, default: 0 },
+    approvedCheckIns: { type: Number, default: 0 },
+    activityHistory: { type: [Date], default: [] },
+    createdAt: { type: Date, default: Date.now },
+  },
+  {
+    timestamps: { createdAt: false, updatedAt: true },
+    collection: 'karma_profiles',
+  },
+);
+
+export const KarmaProfile: Model<KarmaProfileDocument> =
+  mongoose.models.KarmaProfile ||
+  mongoose.model<KarmaProfileDocument>('KarmaProfile', KarmaProfileSchema);

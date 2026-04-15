@@ -1,0 +1,35 @@
+import { Response, NextFunction } from 'express';
+import { Request } from 'express';
+import { requireAuth } from './auth';
+
+/**
+ * Extends requireAuth: verifies the user has an admin role.
+ * Must be used after requireAuth so req.userRole is populated.
+ * Returns 403 if the user is authenticated but not an admin.
+ */
+export async function requireAdminAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    requireAuth(req, res, (err?: unknown) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+
+  const adminRoles = ['admin', 'superadmin'];
+  if (!req.userRole || !adminRoles.includes(req.userRole)) {
+    res.status(403).json({
+      success: false,
+      message: 'Admin access required',
+    });
+    return;
+  }
+
+  next();
+}

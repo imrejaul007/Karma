@@ -89,7 +89,10 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
-      const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10), 100);
+      let limit = parseInt(String(req.query.limit ?? '20'), 10);
+      // MED-18 FIX: Validate parseInt result and enforce bounds
+      if (isNaN(limit) || limit < 1) limit = 20;
+      if (limit > 100) limit = 100;
       const history = await getKarmaHistory(userId, limit);
       res.json({ history });
     } catch (err) {

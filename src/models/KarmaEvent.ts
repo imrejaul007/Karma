@@ -46,6 +46,8 @@ const KarmaEventSchema = new Schema<KarmaEventDocument>(
       required: true,
       index: true,
     },
+    // SCHEMA FIX: Field validation note - Mongoose does not enforce ref constraints at DB level.
+    // Service-level validation in controllers/services must verify Event and Merchant documents exist.
     ngoId: { type: Schema.Types.ObjectId, ref: 'Merchant', required: true, index: true },
     category: {
       type: String,
@@ -72,8 +74,6 @@ const KarmaEventSchema = new Schema<KarmaEventDocument>(
       default: 'draft',
       index: true,
     },
-    createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now },
   },
   {
     timestamps: true,

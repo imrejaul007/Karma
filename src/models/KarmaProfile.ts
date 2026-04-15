@@ -118,6 +118,11 @@ const KarmaProfileSchema = new Schema<KarmaProfileDocument>(
   },
 );
 
+// SCHEMA FIX: Add indexes for common query patterns
+KarmaProfileSchema.index({ level: 1, createdAt: -1 });
+// SCHEMA FIX: Index on nested conversionHistory.batchId for batch queries
+KarmaProfileSchema.index({ 'conversionHistory.batchId': 1 }, { sparse: true });
+
 export const KarmaProfile: Model<KarmaProfileDocument> =
   mongoose.models.KarmaProfile ||
   mongoose.model<KarmaProfileDocument>('KarmaProfile', KarmaProfileSchema);

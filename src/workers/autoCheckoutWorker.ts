@@ -84,7 +84,7 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
         const eventId = raw.eventId as string;
 
         // Look up event to determine end time
-        const event = await KarmaEvent.findById(eventId).lean() as KarmaEventDocument | null;
+        const event = await (KarmaEvent.findById(eventId).lean().exec() as unknown) as (KarmaEventDocument | null);
 
         if (!event) {
           result.skipped++;

@@ -15,6 +15,8 @@ export interface ILevelHistoryEntry {
   level: Level;
   earnedAt: Date;
   droppedAt?: Date;
+  // G-KS-M1 FIX: Add reason field to track why level changed.
+  reason?: string;
 }
 
 export interface IConversionHistoryEntry {
@@ -48,6 +50,10 @@ export interface IKarmaProfile {
   activityHistory: Date[];
   createdAt: Date;
   updatedAt: Date;
+  // G-KS-A1 FIX: Add lastDecayAppliedAt field.
+  lastDecayAppliedAt?: Date;
+  // G-KS-M32 FIX: Add userTimezone field.
+  userTimezone?: string;
 }
 
 const BadgeSchema = new Schema<IBadge>(
@@ -64,6 +70,8 @@ const LevelHistoryEntrySchema = new Schema<ILevelHistoryEntry>(
     level: { type: String, enum: ['L1', 'L2', 'L3', 'L4'] as Level[], required: true },
     earnedAt: { type: Date, required: true },
     droppedAt: { type: Date },
+    // G-KS-M1 FIX: Add reason field to track why level changed.
+    reason: { type: String },
   },
   { _id: false },
 );
@@ -111,6 +119,12 @@ const KarmaProfileSchema = new Schema<KarmaProfileDocument>(
     approvedCheckIns: { type: Number, default: 0 },
     activityHistory: { type: [Date], default: [] },
     createdAt: { type: Date, default: Date.now },
+    // G-KS-A1 FIX: Add lastDecayAppliedAt to schema.
+    // applyDailyDecay reads/writes this field but it was missing from the schema,
+    // causing it to be silently dropped by Mongoose.
+    lastDecayAppliedAt: { type: Date },
+    // G-KS-M32 FIX: Add userTimezone to schema.
+    userTimezone: { type: String, default: 'UTC' },
   },
   {
     timestamps: { createdAt: false, updatedAt: true },

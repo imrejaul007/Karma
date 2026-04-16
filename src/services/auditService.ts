@@ -40,12 +40,22 @@ const COLLECTION_NAME = 'karma_audit_logs';
 
 /**
  * Insert a single audit log entry into the dedicated collection.
- * Uses unordered insert for fire-and-forget semantics — failures are logged but not thrown.
+ *
+ * G-KS-E3 FIX: Critical admin actions (BATCH_EXECUTE, KILL_SWITCH) must throw
+ * on audit failure — silent failure on high-risk operations is a compliance gap.
+ * Non-critical actions continue to use fire-and-forget semantics.
  */
 export async function logAudit(entry: AuditLogEntry): Promise<void> {
+  // Critical actions that MUST throw on audit failure
+  const criticalActions = ['BATCH_EXECUTE', 'KILL_SWITCH', 'ADMIN_ROLE_CHANGE'];
+  const isCritical = criticalActions.includes(entry.action);
+
   try {
     const db = mongoose.connection.db;
     if (!db) {
+      if (isCritical) {
+        throw new Error('logAudit: no DB connection, cannot log critical action');
+      }
       log.warn('logAudit: no DB connection, skipping audit write');
       return;
     }
@@ -64,6 +74,18 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
       log.debug('Audit duplicate suppressed', { action: entry.action });
       return;
     }
+
+    if (isCritical) {
+      // G-KS-E3 FIX: Re-throw for critical actions so the caller can handle it.
+      log.error('CRITICAL: Failed to write audit log for critical action', {
+        action: entry.action,
+        adminId: entry.adminId,
+        batchId: entry.batchId,
+        error: (err as Error).message,
+      });
+      throw new Error(`Audit log failed for critical action '${entry.action}': ${(err as Error).message}`);
+    }
+
     log.error('Failed to write audit log', { entry, error: (err as Error).message });
   }
 }

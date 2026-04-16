@@ -40,6 +40,8 @@ export interface LevelHistoryEntry {
   level: string;
   earnedAt: Date;
   droppedAt?: Date;
+  // G-KS-M1 FIX: Add reason field to track why level changed.
+  reason?: string;
 }
 
 export interface ConversionHistoryEntry {
@@ -81,6 +83,10 @@ export interface KarmaProfile {
   activityHistory: Date[];
   createdAt: Date;
   updatedAt: Date;
+  // G-KS-A1 FIX: Track when decay was last applied to prevent double-decay.
+  lastDecayAppliedAt?: Date;
+  // G-KS-M32 FIX: Store user's timezone for decay calculations.
+  userTimezone?: string;
 }
 
 export interface KarmaEvent {

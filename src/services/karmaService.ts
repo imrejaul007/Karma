@@ -11,7 +11,7 @@
 import moment from 'moment';
 import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
-import { redisClient as redis } from '../config/redis.js';
+import { redis } from '../config/redis.js';
 import {
   KarmaProfile,
   EarnRecord,
@@ -124,6 +124,11 @@ export async function addKarma(
     isApproved?: boolean;
   },
 ): Promise<void> {
+  // G-KS-B2 FIX: Validate karma is a finite positive number.
+  if (typeof karma !== 'number' || !Number.isFinite(karma) || karma <= 0) {
+    throw new Error(`Invalid karma value: ${karma} (must be a positive finite number)`);
+  }
+
   const WEEKLY_COIN_CAP = 300;
   // G-KS-B5 FIX: Use startOf('isoWeek') to match batchService consistency.
   // ISO week starts on Monday; locale-aware startOf('week') varies by locale.
@@ -477,13 +482,15 @@ export async function getWeeklyKarmaUsed(
   weekOf?: Date,
 ): Promise<number> {
   const profile = await getOrCreateProfile(userId);
+  // NA-MED-13 FIX: Use startOf('isoWeek') consistently to match addKarma() and batchService.
+  // ISO week starts on Monday; locale-aware startOf('week') varies by locale.
   const targetWeek = weekOf
-    ? moment(weekOf).startOf('week')
-    : moment().startOf('week');
+    ? moment(weekOf).startOf('isoWeek')
+    : moment().startOf('isoWeek');
 
   if (
     profile.weekOfLastKarmaEarned &&
-    moment(profile.weekOfLastKarmaEarned).startOf('week').isSame(targetWeek)
+    moment(profile.weekOfLastKarmaEarned).startOf('isoWeek').isSame(targetWeek)
   ) {
     return profile.thisWeekKarmaEarned;
   }
@@ -511,7 +518,8 @@ export async function getKarmaHistory(
       karmaConverted: entry.karmaConverted,
       coinsEarned: entry.coinsEarned,
       rate: entry.rate,
-      batchId: entry.batchId.toString(),
+      // G-KS-H19 FIX: Guard against undefined batchId before calling toString().
+      batchId: entry.batchId?.toString() ?? 'unknown',
       convertedAt: entry.convertedAt,
     }));
 }

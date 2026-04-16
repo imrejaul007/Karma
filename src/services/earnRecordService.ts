@@ -97,10 +97,10 @@ export async function createEarnRecord(
   const level: Level = (profile?.level as Level) ?? 'L1';
   const conversionRate = getConversionRate(level);
 
-  // Store gps_match as boolean (true if score >= 0.5)
+  // Store gps_match as 1 (match) or 0 (no match) — VerificationSignals type uses number
   const storedSignals: VerificationSignals = {
     ...verificationSignals,
-    gps_match: verificationSignals.gps_match >= 0.5,
+    gps_match: verificationSignals.gps_match >= 0.5 ? 1 : 0,
   };
 
   const now = new Date();

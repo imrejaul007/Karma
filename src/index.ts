@@ -137,9 +137,23 @@ async function start() {
 
   await connectMongoDB();
 
+  // G-KS-L3 FIX: Start all cron workers after DB is connected.
+  const { startDecayWorker } = await import('./workers/decayWorker.js');
+  const { startBatchScheduler } = await import('./workers/batchScheduler.js');
+  const { startAutoCheckoutWorker } = await import('./workers/autoCheckoutWorker.js');
+  startDecayWorker();
+  startBatchScheduler();
+  startAutoCheckoutWorker();
+
   const server = app.listen(port, '0.0.0.0', () => {
     logger.info(`[rez-karma-service] HTTP API listening on port ${port}`);
   });
+
+  // G-KS-L3 FIX: Stop all workers on graceful shutdown.
+  // Import workers lazily to avoid circular dependencies.
+  const { stopDecayWorker } = await import('./workers/decayWorker.js');
+  const { stopBatchScheduler } = await import('./workers/batchScheduler.js');
+  const { stopAutoCheckoutWorker } = await import('./workers/autoCheckoutWorker.js');
 
   const shutdown = async (signal: string) => {
     if (isShuttingDown) return;
@@ -149,6 +163,12 @@ async function start() {
     server.close(() => {
       logger.info('[SHUTDOWN] HTTP server closed');
     });
+
+    // G-KS-L3 FIX: Stop all cron workers before closing database connections.
+    stopDecayWorker();
+    stopBatchScheduler();
+    stopAutoCheckoutWorker();
+    logger.info('[SHUTDOWN] All workers stopped');
 
     try {
       await mongoose.disconnect();

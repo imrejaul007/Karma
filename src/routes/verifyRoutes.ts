@@ -204,9 +204,11 @@ router.get('/status/:bookingId', requireAuth, async (req: Request, res: Response
     }
 
     const raw = booking as Record<string, unknown>;
+    // G-KS-C8 FIX: raw.userId is an ObjectId from MongoDB — convert to string before comparison.
+    const bookingUserIdStr = String(raw.userId ?? '');
     if (
       req.userId &&
-      req.userId !== (raw.userId as string) &&
+      req.userId !== bookingUserIdStr &&
       req.userRole !== 'admin' &&
       req.userRole !== 'superadmin'
     ) {

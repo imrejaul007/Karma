@@ -44,9 +44,25 @@ export async function requireAuth(
       { timeout: 5000 },
     );
 
-    req.userId = response.data.userId;
-    req.userRole = response.data.role;
-    req.userPermissions = response.data.permissions;
+    // G-KS-C2 FIX: Validate response shape before trusting.
+    // Reject if userId is missing, not a string, or empty.
+    const payload = response.data;
+    if (
+      !payload ||
+      typeof payload.userId !== 'string' ||
+      payload.userId.length === 0 ||
+      typeof payload.role !== 'string'
+    ) {
+      res.status(503).json({
+        success: false,
+        message: 'Authentication service returned malformed response',
+      });
+      return;
+    }
+
+    req.userId = payload.userId;
+    req.userRole = payload.role;
+    req.userPermissions = Array.isArray(payload.permissions) ? payload.permissions : undefined;
     next();
   } catch (err: unknown) {
     const axiosErr = err as { response?: { status?: number; data?: unknown }; message?: string };

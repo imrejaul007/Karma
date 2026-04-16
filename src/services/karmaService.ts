@@ -125,7 +125,9 @@ export async function addKarma(
   },
 ): Promise<void> {
   const WEEKLY_COIN_CAP = 300;
-  const startOfWeek = moment().startOf('week').toDate();
+  // G-KS-B5 FIX: Use startOf('isoWeek') to match batchService consistency.
+  // ISO week starts on Monday; locale-aware startOf('week') varies by locale.
+  const startOfWeek = moment().startOf('isoWeek').toDate();
 
   // HIGH-04 FIX: Use MongoDB atomic findOneAndUpdate to prevent race condition.
   // This check-then-act is now atomic: only documents where weeklyKarmaEarned < CAP
@@ -269,7 +271,11 @@ export async function recordKarmaEarned(
   },
 ): Promise<void> {
   const profile = await getOrCreateProfile(userId);
+  // G-KS-B11 FIX: Increment eventsJoined when user completes an event.
+  // Previously only eventsCompleted was incremented, making eventsJoined always 0.
+  // This ensures completionRate in trust score calculation is meaningful.
   profile.eventsCompleted += 1;
+  profile.eventsJoined += 1;
   await profile.save();
   try {
     await addKarma(userId, karmaEarned, {

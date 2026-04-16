@@ -8,6 +8,7 @@
  *   - If event end time + 1 hour grace period has passed:
  *       - Sets qrCheckedOut = true (retroactive timestamp)
  *       - Sets verificationStatus = 'partial'
+ *       - Creates EarnRecord with partial signals (partial credit)
  *       - Sends notification to user
  *
  * This ensures users who forget to check out still receive partial credit
@@ -17,6 +18,9 @@ import { CronJob } from 'cron';
 import moment from 'moment';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger.js';
+import { getConversionRate } from '../engines/karmaEngine.js';
+import { EarnRecord } from '../models/EarnRecord.js';
+import { KarmaProfile } from '../models/KarmaProfile.js';
 
 // ---------------------------------------------------------------------------
 // EventBooking cross-service model (same pattern as verificationEngine.ts)
@@ -123,6 +127,59 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
           notes: 'Auto-checkout: user forgot to check out',
         });
 
+        // G-KS-B4 FIX: Create EarnRecord for the partial auto-checkout.
+        // The user gets partial karma credit (50% rate) since they forgot to scan out.
+        try {
+          const profile = await KarmaProfile.findOne({ userId: raw.userId as string }).lean();
+          const level = (profile?.level as string) ?? 'L1';
+          const conversionRate = getConversionRate(level);
+          const karmaEarned = Math.floor((event.expectedDurationHours * 5) * 0.5); // partial karma: 50% of estimated
+
+          const idempotencyKey = `autocheckout_${booking._id.toString()}`;
+
+          // Check for existing record (idempotent)
+          const existing = await EarnRecord.findOne({ idempotencyKey }).lean();
+          if (!existing) {
+            const record = new EarnRecord({
+              userId: new mongoose.Types.ObjectId(raw.userId as string),
+              eventId: new mongoose.Types.ObjectId(eventId),
+              bookingId: booking._id,
+              karmaEarned,
+              activeLevelAtApproval: level as 'L1' | 'L2' | 'L3' | 'L4',
+              conversionRateSnapshot: conversionRate,
+              csrPoolId: new mongoose.Types.ObjectId(raw.csrPoolId as string || '000000000000000000000000'),
+              verificationSignals: {
+                qr_in: true,           // User did check in
+                qr_out: false,         // No QR checkout
+                gps_match: 0,           // No GPS at checkout
+                ngo_approved: false,   // Pending NGO verification
+                photo_proof: false,
+              },
+              confidenceScore: 0.35,    // Below partial threshold, but auto-checkout grants partial karma
+              status: 'APPROVED_PENDING_CONVERSION',
+              approvedAt: new Date(),
+              createdAt: new Date(),
+              rezCoinsEarned: Math.floor(karmaEarned * conversionRate),
+              idempotencyKey,
+            });
+            await record.save();
+            logger.info('[AutoCheckoutWorker] EarnRecord created', {
+              recordId: record._id,
+              userId: raw.userId,
+              eventId,
+              karmaEarned,
+            });
+          }
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          result.errors.push(`EarnRecord creation for ${booking._id}: ${errorMsg}`);
+          logger.error('[AutoCheckoutWorker] Failed to create EarnRecord', {
+            bookingId: booking._id,
+            userId: raw.userId,
+            error: err,
+          });
+        }
+
         result.checkedOut++;
         logger.info('[AutoCheckoutWorker] Auto-checkout performed', {
           bookingId: booking._id,
@@ -166,11 +223,18 @@ async function sendAutoCheckoutNotification(userId: string, bookingId: string): 
       return;
     }
 
+    // G-KS-H9 FIX: Validate that INTERNAL_SERVICE_TOKEN is set and non-empty.
+    const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
+    if (!internalToken) {
+      logger.debug('[AutoCheckoutWorker] INTERNAL_SERVICE_TOKEN not configured, skipping notification', { userId });
+      return;
+    }
+
     const response = await fetch(`${notificationServiceUrl}/api/notifications`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Internal-Token': process.env.INTERNAL_SERVICE_TOKEN || '',
+        'X-Internal-Token': internalToken,
       },
       body: JSON.stringify({
         userId,

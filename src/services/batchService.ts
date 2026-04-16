@@ -282,7 +282,9 @@ export async function getBatchPreview(batchId: string): Promise<BatchPreview | n
   if (!pool) return null;
 
   // Fetch all records for this batch and compute caps
-  const records = await EarnRecord.find({ batchId: batch._id.toString() }).lean();
+  // G-KS-F2 FIX: Pass batch._id (ObjectId) directly, not batch._id.toString() (string).
+  // The EarnRecord.batchId field is an ObjectId, so string comparisons fail.
+  const records = await EarnRecord.find({ batchId: batch._id }).lean();
 
   const recordsWithCap: EarnRecordData[] = await Promise.all(
     records.map(async (r) => {
@@ -402,8 +404,10 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
     });
   }
 
+  // G-KS-F8 FIX: Pass batch._id (ObjectId) directly, not batch._id.toString() (string).
+  // EarnRecord.batchId is an ObjectId field; string comparison always fails.
   const records = await EarnRecord.find({
-    batchId: batch._id.toString(),
+    batchId: batch._id,
     status: 'APPROVED_PENDING_CONVERSION',
   });
 
@@ -465,18 +469,31 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
       // Update record
       record.status = 'CONVERTED';
       record.convertedAt = new Date();
-      record.convertedBy = adminId as unknown as Types.ObjectId;
+      // G-KS-F10 FIX: Validate adminId is a valid ObjectId before casting.
+      record.convertedBy = Types.ObjectId.isValid(adminId)
+        ? new Types.ObjectId(adminId)
+        : undefined;
       record.rezCoinsEarned = cappedCoins;
       record.idempotencyKey = idempotencyKey;
       await record.save();
 
-      // Decrement CSR pool atomically
-      await CSRPool.updateOne(
-        { _id: batch.csrPoolId },
+      // G-KS-B8 FIX: Atomic CSR pool decrement using findOneAndUpdate with a guard condition.
+      // This prevents over-decrementing if concurrent requests race. The $inc operation
+      // is still atomic; the condition ensures the pool has sufficient remaining coins.
+      const poolUpdate = await CSRPool.findOneAndUpdate(
+        { _id: batch.csrPoolId, coinPoolRemaining: { $gte: cappedCoins } },
         { $inc: { coinPoolRemaining: -cappedCoins, issuedCoins: cappedCoins } },
       );
+      if (!poolUpdate) {
+        log.warn('executeBatch: pool update failed (insufficient coins or pool not found)', {
+          csrPoolId: batch.csrPoolId.toString(),
+          required: cappedCoins,
+          recordId: recordIdStr,
+        });
+      }
 
       // Update KarmaProfile conversion history
+      // G-KS-F8 FIX: Use batch._id (ObjectId) directly, not batch._id.toString().
       await KarmaProfile.updateOne(
         { userId: record.userId },
         {
@@ -485,7 +502,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
               karmaConverted: record.karmaEarned,
               coinsEarned: cappedCoins,
               rate: record.conversionRateSnapshot,
-              batchId: batch._id.toString() as unknown as Types.ObjectId,
+              batchId: batch._id,
               convertedAt: new Date(),
             },
           },
@@ -506,7 +523,10 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
   batch.status = failed > 0 ? 'PARTIAL' : 'EXECUTED';
   batch.totalRezCoinsExecuted = totalCoinsIssued;
   batch.executedAt = new Date();
-  batch.executedBy = adminId as unknown as Types.ObjectId;
+  // G-KS-F10 FIX: Validate adminId before casting to ObjectId.
+  batch.executedBy = Types.ObjectId.isValid(adminId)
+    ? new Types.ObjectId(adminId)
+    : undefined;
   await batch.save();
 
   // Log audit
@@ -685,11 +705,12 @@ export async function checkBatchAnomalies(
  * @returns Number of batches paused
  */
 export async function pauseAllPendingBatches(reason: string): Promise<number> {
+  // G-KS-B3 FIX: Set status to 'PAUSED' (the correct enum value), not 'DRAFT'.
   const result = await Batch.updateMany(
     { status: { $in: ['READY', 'DRAFT'] } },
     {
       $set: {
-        status: 'DRAFT',
+        status: 'PAUSED',
         pauseReason: reason,
         pausedAt: new Date(),
       },

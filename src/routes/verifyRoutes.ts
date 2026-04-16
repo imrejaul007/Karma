@@ -196,14 +196,14 @@ router.get('/status/:bookingId', requireAuth, async (req: Request, res: Response
       return;
     }
 
-    const booking = await EventBookingModel.findById(bookingId).lean() as (Record<string, unknown> & { _id: mongoose.Types.ObjectId }) | null;
+    const booking = await EventBookingModel.findById(bookingId).lean();
 
     if (!booking) {
       res.status(404).json({ success: false, message: 'Booking not found' });
       return;
     }
 
-    const raw = booking;
+    const raw = booking as Record<string, unknown>;
     // G-KS-C8 FIX: raw.userId is an ObjectId from MongoDB — convert to string before comparison.
     const bookingUserIdStr = String(raw.userId ?? '');
     if (

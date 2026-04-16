@@ -25,8 +25,16 @@ export function startDecayWorker(): void {
     return;
   }
 
-  job = new CronJob(DAILY_DECAY_SCHEDULE, async () => {
-    await runDecayJob();
+  job = new CronJob({
+    cronTime: DAILY_DECAY_SCHEDULE,
+    onTick: async () => {
+      await runDecayJob();
+    },
+    onComplete: () => {
+      logger.info('Decay cron job completed');
+    },
+    timeZone: 'UTC',
+    start: false,
   });
 
   job.start();

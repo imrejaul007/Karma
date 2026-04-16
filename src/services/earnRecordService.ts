@@ -4,7 +4,6 @@
  * Manages EarnRecord lifecycle: creation after verification,
  * retrieval, pagination, status updates, and batch queries.
  */
-import { v4 as uuidv4 } from 'uuid';
 import { EarnRecord, EarnRecordDocument } from '../models/EarnRecord.js';
 import { KarmaProfile, KarmaProfileDocument } from '../models/KarmaProfile.js';
 import { logger } from '../config/logger.js';
@@ -79,8 +78,9 @@ export async function createEarnRecord(
     csrPoolId = '',
   } = params;
 
-  // Build idempotency key from booking + action
-  const idempotencyKey = `earn_${bookingId}_${uuidv4().slice(0, 8)}`;
+  // G-KS-C7 FIX: Deterministic idempotency key — derived only from bookingId.
+  // No UUID suffix — same bookingId always produces the same key, enabling true deduplication.
+  const idempotencyKey = `earn_${bookingId}`;
 
   // Check for existing record with same idempotency key (idempotent)
   const existing = await EarnRecord.findOne({ idempotencyKey }).lean();

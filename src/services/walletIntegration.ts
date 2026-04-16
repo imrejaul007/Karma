@@ -34,7 +34,11 @@ function getWalletClient(): AxiosInstance {
     walletClient = axios.create({
       baseURL: walletServiceUrl,
       timeout: 10_000,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // G-KS-C9 FIX: All internal service calls must include the internal service token.
+        'X-Internal-Token': process.env.INTERNAL_SERVICE_TOKEN ?? '',
+      },
     });
   }
   return walletClient;
@@ -46,9 +50,8 @@ function getWalletClient(): AxiosInstance {
  * @param params - Credit parameters including userId, amount, coinType, etc.
  * @returns Result with success flag, transactionId on success, or error message on failure.
  *
- * Calls: POST {walletServiceUrl}/api/wallet/credit
- * Body shape mirrors walletService.creditCoins() signature:
- *   { userId, amount, coinType, source, description, idempotencyKey, referenceModel, sourceId }
+ * G-KS-C9 FIX: Uses /internal/credit endpoint (not /api/wallet/credit) and includes
+ * X-Internal-Token header for service-to-service authentication.
  */
 export async function creditUserWallet(params: WalletCreditParams): Promise<WalletCreditResult> {
   const { userId, amount, coinType, source, referenceId, referenceModel, description, idempotencyKey } = params;
@@ -57,10 +60,17 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
     return { success: false, error: 'Amount must be positive' };
   }
 
+  // G-KS-C9 FIX: Validate internal token is configured before making the call.
+  if (!process.env.INTERNAL_SERVICE_TOKEN) {
+    log.error('creditUserWallet: INTERNAL_SERVICE_TOKEN not configured');
+    return { success: false, error: 'Internal service token not configured' };
+  }
+
   try {
     const client = getWalletClient();
     const response = await client.post<{ success: boolean; balance: number; transactionId: string }>(
-      '/api/wallet/credit',
+      // G-KS-C9 FIX: Use internal endpoint /internal/credit, not /api/wallet/credit.
+      '/internal/credit',
       {
         userId,
         amount,
@@ -110,13 +120,19 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
  * @param userId - User ID to query
  * @returns Balance as a number, or 0 on error
  *
- * Calls: GET {walletServiceUrl}/api/wallet/balance?coinType=karma_points
+ * G-KS-C9 FIX: Uses /internal/balance endpoint and includes X-Internal-Token header.
  */
 export async function getKarmaBalance(userId: string): Promise<number> {
+  if (!process.env.INTERNAL_SERVICE_TOKEN) {
+    log.warn('getKarmaBalance: INTERNAL_SERVICE_TOKEN not configured');
+    return 0;
+  }
+
   try {
     const client = getWalletClient();
+    // G-KS-C9 FIX: Use internal endpoint /internal/balance, not /api/wallet/balance.
     const response = await client.get<{ balance?: { available?: number }; coins?: Array<{ type: string; amount: number }> }>(
-      '/api/wallet/balance',
+      '/internal/balance',
       { params: { coinType: 'karma_points' } },
     );
 

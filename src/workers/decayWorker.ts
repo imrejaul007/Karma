@@ -6,9 +6,12 @@
  * for 30+ days, and logs level drops.
  */
 import { CronJob } from 'cron';
-import { batchCronSchedule } from '../config/index.js';
 import { applyDecayToAll } from '../services/karmaService.js';
 import { logger } from '../utils/logger.js';
+
+// G-KS-B5 FIX: Decay runs DAILY (midnight UTC), not weekly.
+// The weekly batchCronSchedule is used for batch conversion, not decay.
+const DAILY_DECAY_SCHEDULE = '0 0 * * *';
 
 let job: CronJob | null = null;
 
@@ -23,7 +26,7 @@ export function startDecayWorker(): void {
   }
 
   job = new CronJob({
-    cronTime: batchCronSchedule,
+    cronTime: DAILY_DECAY_SCHEDULE,
     onTick: async () => {
       await runDecayJob();
     },
@@ -35,7 +38,7 @@ export function startDecayWorker(): void {
   });
 
   job.start();
-  logger.info('Decay worker started — scheduled for midnight UTC daily');
+  logger.info(`Decay worker started — scheduled daily at midnight UTC (${DAILY_DECAY_SCHEDULE})`);
 }
 
 /**

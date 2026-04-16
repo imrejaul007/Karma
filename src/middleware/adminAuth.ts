@@ -22,8 +22,11 @@ export async function requireAdminAuth(
     });
   });
 
+  // G-KS-H1 FIX: Normalize role to lowercase before comparison.
+  // Handles case-sensitive auth services that return mixed-case roles.
+  const normalizedRole = (req.userRole ?? '').toLowerCase();
   const adminRoles = ['admin', 'superadmin'];
-  if (!req.userRole || !adminRoles.includes(req.userRole)) {
+  if (!normalizedRole || !adminRoles.includes(normalizedRole)) {
     res.status(403).json({
       success: false,
       message: 'Admin access required',

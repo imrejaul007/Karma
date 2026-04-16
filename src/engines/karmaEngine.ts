@@ -201,9 +201,10 @@ function daysBetween(from: Date | null, to: Date, userTimezone?: string): number
   if (!from) return 999; // treat null as very old
 
   // Apply timezone if provided, otherwise use UTC
-  const tz = userTimezone || 'UTC';
-  const toMoment = userTimezone ? moment(to).tz(tz) : moment.utc(to);
-  const fromMoment = userTimezone ? moment(from).tz(tz) : moment.utc(from);
+  // G-KS-M32 FIX: Use UTC throughout to avoid moment-timezone dependency.
+  // Server-side decay calculations are timezone-agnostic — using UTC is consistent.
+  const toMoment = moment.utc(to);
+  const fromMoment = moment.utc(from);
 
   return Math.max(0, toMoment.startOf('day').diff(fromMoment.startOf('day'), 'days'));
 }

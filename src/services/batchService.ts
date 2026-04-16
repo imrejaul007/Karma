@@ -11,7 +11,6 @@
  */
 import moment from 'moment';
 import { Types } from 'mongoose';
-import { randomUUID } from 'crypto';
 import { EarnRecord } from '../models/EarnRecord.js';
 import { Batch } from '../models/Batch.js';
 import { CSRPool } from '../models/CSRPool.js';
@@ -20,7 +19,6 @@ import { creditUserWallet } from './walletIntegration.js';
 import { logAudit } from './auditService.js';
 import { WEEKLY_COIN_CAP } from '../engines/karmaEngine.js';
 import { createServiceLogger } from '../config/logger.js';
-import { redis } from '../config/redis.js';
 
 const log = createServiceLogger('batchService');
 
@@ -103,30 +101,12 @@ export interface EarnRecordData {
  * Create weekly batches for all CSR pools with pending earn records.
  * Groups records by csrPoolId and creates one batch per pool.
  *
- * G-KS-A3/M22 FIX: Uses a Redis distributed lock to prevent concurrent batch creation
- * from multiple service instances (horizontal scaling).
- *
  * @returns Array of created Batch documents
  */
 export async function createWeeklyBatch(): Promise<InstanceType<typeof Batch>[]> {
-  // G-KS-A3/M22 FIX: Acquire distributed lock before creating batches.
-  const lockKey = 'batch:create:lock';
-  const lockToken = randomUUID();
-  // Use setnx + expire for atomic-like lock acquisition with TTL.
-  const lockAcquired = await redis.setnx(lockKey, lockToken);
-  if (lockAcquired) {
-    await redis.expire(lockKey, 300); // 5-minute TTL
-  }
-
-  if (!lockAcquired) {
-    log.warn('createWeeklyBatch: another instance is creating batches, skipping');
-    return [];
-  }
-
-  try {
-    const now = new Date();
-    const weekStart = moment(now).subtract(7, 'days').startOf('day').toDate();
-    const weekEnd = moment(now).startOf('day').toDate();
+  const now = new Date();
+  const weekStart = moment(now).subtract(7, 'days').startOf('day').toDate();
+  const weekEnd = moment(now).startOf('day').toDate();
 
   // Aggregate pending records grouped by CSR pool
   const groups = await EarnRecord.aggregate<
@@ -174,13 +154,6 @@ export async function createWeeklyBatch(): Promise<InstanceType<typeof Batch>[]>
   }
 
   return createdBatches;
-  } finally {
-    // G-KS-A3/M22 FIX: Always release the distributed lock.
-    const lockStillHeld = await redis.get(lockKey);
-    if (lockStillHeld === lockToken) {
-      await redis.del(lockKey);
-    }
-  }
 }
 
 /**
@@ -316,7 +289,7 @@ export async function getBatchPreview(batchId: string): Promise<BatchPreview | n
   const recordsWithCap: EarnRecordData[] = await Promise.all(
     records.map(async (r) => {
       const rawCoins = Math.floor(r.karmaEarned * r.conversionRateSnapshot);
-      const weeklyUsed = await getWeeklyCoinsUsed(r.userId, r.approvedAt);
+      const weeklyUsed = await getWeeklyCoinsUsed(r.userId, r.approvedAt ?? new Date());
       const capped = applyCapsToRecord(
         { karmaEarned: r.karmaEarned, conversionRateSnapshot: r.conversionRateSnapshot },
         weeklyUsed,
@@ -335,14 +308,14 @@ export async function getBatchPreview(batchId: string): Promise<BatchPreview | n
 
   const totalEstimated = recordsWithCap.reduce((sum, r) => sum + r.estimatedCoins, 0);
   const totalCapped = recordsWithCap.reduce((sum, r) => sum + r.cappedCoins, 0);
-  const anomalies = await checkBatchAnomalies(batchId, batch.csrPoolId, batch.weekStart, batch.weekEnd);
+  const anomalies = await checkBatchAnomalies(batchId, batch.csrPoolId.toString(), batch.weekStart, batch.weekEnd);
 
   return {
     batch: {
       _id: batch._id.toString(),
       weekStart: batch.weekStart,
       weekEnd: batch.weekEnd,
-      csrPoolId: batch.csrPoolId,
+      csrPoolId: batch.csrPoolId.toString(),
       status: batch.status,
       totalEarnRecords: batch.totalEarnRecords,
       totalKarma: batch.totalKarma,
@@ -469,7 +442,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
 
       // Compute capped coins
       const rawCoins = Math.floor(record.karmaEarned * record.conversionRateSnapshot);
-      const weeklyUsed = await getWeeklyCoinsUsed(record.userId, record.approvedAt);
+      const weeklyUsed = await getWeeklyCoinsUsed(record.userId, record.approvedAt ?? new Date());
       const cappedCoins = applyCapsToRecord(
         { karmaEarned: record.karmaEarned, conversionRateSnapshot: record.conversionRateSnapshot },
         weeklyUsed,
@@ -477,7 +450,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
 
       // Credit wallet
       const creditResult = await creditUserWallet({
-        userId: record.userId,
+        userId: record.userId.toString(),
         amount: cappedCoins,
         coinType: 'rez',
         source: 'karma_conversion',
@@ -577,8 +550,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
   await notifyUsersOfConversion(
     convertedRecords.map((r) => ({
       _id: r._id.toString(),
-      // G-KS-F8 FIX: Convert ObjectId userId to string for EarnRecordData compatibility.
-      userId: String(r.userId),
+      userId: r.userId.toString(),
       karmaEarned: r.karmaEarned,
       conversionRateSnapshot: r.conversionRateSnapshot,
       status: r.status,
@@ -621,7 +593,8 @@ export function applyCapsToRecord(
 /**
  * Get total ReZ coins issued to a user this week (ISO week).
  */
-async function getWeeklyCoinsUsed(userId: string, weekOf: Date): Promise<number> {
+async function getWeeklyCoinsUsed(userId: string | Types.ObjectId, weekOf: Date): Promise<number> {
+  const userIdStr = userId instanceof Types.ObjectId ? userId.toString() : userId;
   const weekStart = moment(weekOf).startOf('isoWeek').toDate();
   const weekEnd = moment(weekOf).endOf('isoWeek').toDate();
 
@@ -653,9 +626,7 @@ export async function checkBatchAnomalies(
   const flags: AnomalyFlag[] = [];
 
   // Flag 1: Too many records from one NGO in the batch period
-  const ngoCounts = await EarnRecord.aggregate<
-    Array<{ _id: string | null; count: number }>
-  >([
+  const ngoCountsRaw = await EarnRecord.aggregate([
     {
       $match: {
         csrPoolId,
@@ -674,20 +645,18 @@ export async function checkBatchAnomalies(
     { $unwind: { path: '$event', preserveNullAndEmptyArrays: true } },
     { $group: { _id: '$event.ngoId', count: { $sum: 1 } } },
     { $match: { count: { $gt: 50 } } },
-  ]);
+  ]) as Array<{ _id: unknown; count: number }>;
 
-  if (ngoCounts.length > 0) {
+  if (ngoCountsRaw.length > 0) {
     flags.push({
       type: 'too_many_from_one_ngo',
-      count: ngoCounts.reduce((sum, g) => sum + g.count, 0),
+      count: ngoCountsRaw.reduce((sum, g) => sum + g.count, 0),
       resolved: false,
     });
   }
 
   // Flag 2: Suspicious timestamps — identical approval times across many records
-  const timestampCounts = await EarnRecord.aggregate<
-    Array<{ _id: Date | null; count: number }>
-  >([
+  const timestampCounts = await EarnRecord.aggregate([
     {
       $match: {
         csrPoolId,

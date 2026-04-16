@@ -215,9 +215,9 @@ router.post('/pause-all', requireAdminAuth, async (req: Request, res: Response):
 
 /**
  * GET /api/karma/batch/stats
- * Overall batch statistics. Public (for dashboard).
+ * Overall batch statistics. Admin-only — exposes financial metrics.
  */
-router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     const [totalBatches, executedBatches, pendingBatches, partialBatches, recordStats, coinStats] =
       await Promise.all([

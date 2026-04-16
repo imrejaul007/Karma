@@ -19,7 +19,12 @@ export const merchantServiceUrl =
   process.env.MERCHANT_SERVICE_URL || 'http://rez-merchant-service:3003';
 
 // ── JWT ─────────────────────────────────────────────────────────────────────
-export const jwtSecret = process.env.JWT_SECRET as string;
+export const jwtSecret = (() => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('[CONFIG] JWT_SECRET environment variable is required');
+  }
+  return process.env.JWT_SECRET;
+})();
 
 // ── Batch Conversion ────────────────────────────────────────────────────────
 export const batchCronSchedule = process.env.BATCH_CRON_SCHEDULE || '59 23 * * 0';

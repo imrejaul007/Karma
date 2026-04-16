@@ -50,7 +50,12 @@ export { calculateLevel, getConversionRate };
 export async function getKarmaProfile(
   userId: string,
 ): Promise<KarmaProfileDocument | null> {
-  const result = await KarmaProfile.findOne({ userId }).lean();
+  // KARMA-P1 FIX: Wrap userId in ObjectId — schema defines userId as ObjectId,
+  // but callers pass strings. Without this, every lookup throws a Mongoose CastError.
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return null;
+  }
+  const result = await KarmaProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).lean();
   if (!result) return null;
   // Attach minimal virtuals/defaults that lean() strips
   return result as unknown as KarmaProfileDocument;

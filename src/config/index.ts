@@ -19,9 +19,14 @@ export const merchantServiceUrl =
   process.env.MERCHANT_SERVICE_URL || 'http://rez-merchant-service:3003';
 
 // ── JWT ─────────────────────────────────────────────────────────────────────
+// G-KS-C3 FIX: Validate presence AND minimum length at startup.
+// Rejecting short secrets prevents trivial brute-force attacks on JWTs.
 export const jwtSecret = (() => {
   if (!process.env.JWT_SECRET) {
     throw new Error('[CONFIG] JWT_SECRET environment variable is required');
+  }
+  if (process.env.JWT_SECRET.length < 32) {
+    throw new Error('jwtSecret must be at least 32 characters');
   }
   return process.env.JWT_SECRET;
 })();

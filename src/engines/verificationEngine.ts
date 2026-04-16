@@ -30,6 +30,15 @@ export const EventBookingModel = mongoose.models.EventBooking ||
 // Constants
 // ---------------------------------------------------------------------------
 
+// G-KS-C6 FIX: crypto.timingSafeEqual throws TypeError if buffers differ in
+// length. Wrap it so callers get a safe boolean false instead.
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export const SIGNAL_WEIGHTS: Readonly<Record<keyof VerificationSignals, number>> = {
   qr_in: 0.30,
   qr_out: 0.30,
@@ -186,7 +195,7 @@ export async function validateQRCode(
       .digest('hex')
       .slice(0, 16);
 
-    if (!crypto.timingSafeEqual(Buffer.from(decoded.sig), Buffer.from(expectedSig))) {
+    if (!safeCompare(decoded.sig, expectedSig)) {
       return { valid: false, error: 'QR code signature verification failed' };
     }
 

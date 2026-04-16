@@ -8,7 +8,7 @@ export async function connectMongoDB(uri?: string): Promise<void> {
     process.exit(1);
   }
 
-  mongoose.set('strictQuery', false);
+  mongoose.set('strictQuery', true);
 
   mongoose.connection.on('connected', () => logger.info('[MongoDB] Connected'));
   mongoose.connection.on('disconnected', () => logger.warn('[MongoDB] Disconnected'));

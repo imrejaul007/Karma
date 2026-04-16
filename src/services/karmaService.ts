@@ -67,6 +67,11 @@ export async function getKarmaProfile(
 export async function getOrCreateProfile(
   userId: string,
 ): Promise<KarmaProfileDocument> {
+  // HIGH-15 FIX: Validate ObjectId before construction
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error(`Invalid userId: ${userId}`);
+  }
+
   let profile = await KarmaProfile.findOne({ userId });
   if (!profile) {
     profile = await KarmaProfile.create({
@@ -106,6 +111,7 @@ export async function getOrCreateProfile(
  *
  * BE-KAR-008 FIX: Enforces WEEKLY_COIN_CAP on karma accumulation.
  * If the user has already hit the weekly cap, the karma is rejected.
+ * Uses atomic findOneAndUpdate with $inc to prevent race condition.
  */
 export async function addKarma(
   userId: string,
@@ -118,35 +124,83 @@ export async function addKarma(
     isApproved?: boolean;
   },
 ): Promise<void> {
-  const profile = await getOrCreateProfile(userId);
-
-  const oldLevel = profile.level;
-  const oldActiveKarma = profile.activeKarma;
-
-  // BE-KAR-003 & BE-KAR-008 FIX: Check weekly karma cap before accepting karma
-  const WEEKLY_COIN_CAP = 300; // Import this from karmaEngine or config
+  const WEEKLY_COIN_CAP = 300;
   const startOfWeek = moment().startOf('week').toDate();
-  let weeklyKarmaEarned = profile.thisWeekKarmaEarned;
 
-  // Reset if we've moved to a new week
-  if (
-    profile.weekOfLastKarmaEarned &&
-    moment(profile.weekOfLastKarmaEarned).startOf('week').isBefore(startOfWeek)
-  ) {
-    weeklyKarmaEarned = 0;
-  }
+  // HIGH-04 FIX: Use MongoDB atomic findOneAndUpdate to prevent race condition.
+  // This check-then-act is now atomic: only documents where weeklyKarmaEarned < CAP
+  // will be updated with $inc. If the update affects no documents, the cap was hit.
+  const atomicResult = await KarmaProfile.findOneAndUpdate(
+    {
+      userId,
+      // Check weekly reset and cap condition atomically
+      $expr: {
+        $or: [
+          // Doc has no weekOfLastKarmaEarned (brand new)
+          { $eq: ['$weekOfLastKarmaEarned', null] },
+          // Or we're in a new week
+          {
+            $lt: [
+              {
+                $dateToString: {
+                  format: '%Y-%U',
+                  date: '$weekOfLastKarmaEarned',
+                }
+              },
+              {
+                $dateToString: {
+                  format: '%Y-%U',
+                  date: new Date(startOfWeek),
+                }
+              }
+            ]
+          },
+          // Or we're in the same week but haven't hit the cap yet
+          {
+            $and: [
+              {
+                $eq: [
+                  {
+                    $dateToString: {
+                      format: '%Y-%U',
+                      date: '$weekOfLastKarmaEarned',
+                    }
+                  },
+                  {
+                    $dateToString: {
+                      format: '%Y-%U',
+                      date: new Date(startOfWeek),
+                    }
+                  }
+                ]
+              },
+              { $lt: ['$thisWeekKarmaEarned', WEEKLY_COIN_CAP] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      $inc: { thisWeekKarmaEarned: karma },
+      $set: { weekOfLastKarmaEarned: new Date() }
+    },
+    { new: true }
+  );
 
-  // BE-KAR-008 FIX: Enforce weekly cap
-  if (weeklyKarmaEarned >= WEEKLY_COIN_CAP) {
-    logger.warn(`[Karma] User ${userId} has hit weekly cap (${WEEKLY_COIN_CAP}), rejecting ${karma} karma`, {
+  // If atomicResult is null, the cap was hit by concurrent request
+  if (!atomicResult) {
+    logger.warn(`[Karma] User ${userId} hit weekly cap (${WEEKLY_COIN_CAP}), rejecting ${karma} karma`, {
       userId,
       karmaRequested: karma,
-      weeklyCapRemaining: WEEKLY_COIN_CAP - weeklyKarmaEarned,
     });
     throw new Error(
-      `Weekly karma cap exceeded. Remaining this week: ${WEEKLY_COIN_CAP - weeklyKarmaEarned}`
+      `Weekly karma cap exceeded. Remaining this week: 0`
     );
   }
+
+  const profile = atomicResult;
+  const oldLevel = profile.level;
+  const oldActiveKarma = profile.activeKarma;
 
   // Accumulate karma
   profile.lifetimeKarma += karma;
@@ -191,18 +245,6 @@ export async function addKarma(
     );
   }
 
-  // Track weekly karma earned for cap enforcement
-  const startOfWeek = moment().startOf('week').toDate();
-  if (
-    !profile.weekOfLastKarmaEarned ||
-    moment(profile.weekOfLastKarmaEarned).startOf('week').isBefore(startOfWeek)
-  ) {
-    profile.thisWeekKarmaEarned = karma;
-    profile.weekOfLastKarmaEarned = new Date();
-  } else {
-    profile.thisWeekKarmaEarned += karma;
-  }
-
   // Activity history (keep last 90 days)
   profile.activityHistory.push(new Date());
   if (profile.activityHistory.length > 90) {
@@ -215,6 +257,7 @@ export async function addKarma(
 /**
  * Record a karma event completion (called after verification is complete).
  * Increments eventsCompleted and calls addKarma.
+ * MED-19 FIX: Wrap addKarma() in try-catch to handle and log errors properly.
  */
 export async function recordKarmaEarned(
   userId: string,
@@ -228,11 +271,20 @@ export async function recordKarmaEarned(
   const profile = await getOrCreateProfile(userId);
   profile.eventsCompleted += 1;
   await profile.save();
-  await addKarma(userId, karmaEarned, {
-    ...options,
-    isCheckIn: true,
-    isApproved: true,
-  });
+  try {
+    await addKarma(userId, karmaEarned, {
+      ...options,
+      isCheckIn: true,
+      isApproved: true,
+    });
+  } catch (err: any) {
+    logger.error('recordKarmaEarned: addKarma failed', {
+      userId,
+      karmaEarned,
+      error: err.message,
+    });
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +414,7 @@ export async function getLevelInfo(userId: string): Promise<LevelInfo> {
 
 /**
  * Record a conversion event in the user's profile history.
+ * MED-20 FIX: Check for duplicate batchId before appending to prevent double-counting.
  */
 export async function recordConversion(
   userId: string,
@@ -373,6 +426,14 @@ export async function recordConversion(
   const profile = await KarmaProfile.findOne({ userId });
   if (!profile) {
     logger.warn(`Cannot record conversion: profile not found for user ${userId}`);
+    return;
+  }
+
+  // MED-20: Check if this batchId already exists in conversion history
+  const batchIdStr = batchId.toString();
+  const isDuplicate = profile.conversionHistory.some((entry) => entry.batchId.toString() === batchIdStr);
+  if (isDuplicate) {
+    logger.warn(`Conversion already recorded for user ${userId} with batchId ${batchIdStr}`);
     return;
   }
 

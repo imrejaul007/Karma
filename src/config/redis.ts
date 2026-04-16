@@ -49,6 +49,7 @@ export const redis: IORedis = sentinels
       lazyConnect: false,
       retryStrategy: (times: number) => {
         const base = Math.min(Math.pow(2, times) * 200, 15000);
+        // NOTE: Math.random() is intentional here for non-cryptographic retry jitter
         return Math.floor(base + Math.random() * 500);
       },
       reconnectOnError,
@@ -62,6 +63,7 @@ export const redis: IORedis = sentinels
       tls: redisUrl.startsWith('rediss://') ? {} : undefined,
       retryStrategy: (times: number) => {
         const base = Math.min(Math.pow(2, times) * 200, 15000);
+        // NOTE: Math.random() is intentional here for non-cryptographic retry jitter
         return Math.floor(base + Math.random() * 500);
       },
       reconnectOnError,
@@ -97,6 +99,7 @@ export const bullmqRedis: IORedis = sentinels
       lazyConnect: false,
       retryStrategy: (times: number) => {
         const base = Math.min(Math.pow(2, times) * 200, 15000);
+        // NOTE: Math.random() is intentional here for non-cryptographic retry jitter
         return Math.floor(base + Math.random() * 1000);
       },
       reconnectOnError,
@@ -114,6 +117,7 @@ export const bullmqRedis: IORedis = sentinels
         tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
         retryStrategy: (times: number) => {
           const base = Math.min(Math.pow(2, times) * 200, 15000);
+          // NOTE: Math.random() is intentional here for non-cryptographic retry jitter
           return Math.floor(base + Math.random() * 1000);
         },
         reconnectOnError,

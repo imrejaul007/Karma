@@ -173,7 +173,13 @@ export async function validateQRCode(
     }
 
     // 6. HMAC signature verification
-    const secret = process.env.QR_SECRET || 'default-karma-qr-secret';
+    // KARMA-P1 FIX: Fail closed — never use a default fallback secret.
+    // If QR_SECRET is not configured, throw instead of using a guessable default.
+    const secret = process.env.QR_SECRET;
+    if (!secret) {
+      logger.error('[VerificationEngine] QR_SECRET not configured — refusing to verify');
+      return { valid: false, error: 'QR verification unavailable: server misconfigured' };
+    }
     const expectedSig = crypto
       .createHmac('sha256', secret)
       .update(`${decoded.eventId}:${decoded.type}:${decoded.ts}`)
@@ -572,7 +578,11 @@ export async function generateEventQRCodes(eventId: string): Promise<{
   checkIn: string;
   checkOut: string;
 }> {
-  const secret = process.env.QR_SECRET || 'default-karma-qr-secret';
+  // KARMA-P1 FIX: Fail closed — QR_SECRET must be set.
+  if (!process.env.QR_SECRET) {
+    throw new Error('QR_SECRET environment variable is required to generate event QR codes');
+  }
+  const secret = process.env.QR_SECRET;
   const ts = Date.now();
 
   const checkInPayload: QRPayload = {

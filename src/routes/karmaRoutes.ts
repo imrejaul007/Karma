@@ -29,6 +29,12 @@ const router = Router();
 router.get('/user/:userId', requireAuth, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    // KARMA-P1 FIX: Verify the authenticated user owns this karma profile.
+    // Without this, any authenticated user can read any other user's karma.
+    if (req.userId !== userId) {
+      res.status(403).json({ error: 'Access denied: you can only view your own karma profile' });
+      return;
+    }
     const profile = await getKarmaProfile(userId);
 
     if (!profile) {
@@ -89,6 +95,11 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
+      // KARMA-P1 FIX: Verify ownership.
+      if (req.userId !== userId) {
+        res.status(403).json({ error: 'Access denied: you can only view your own conversion history' });
+        return;
+      }
       let limit = parseInt(String(req.query.limit ?? '20'), 10);
       // MED-18 FIX: Validate parseInt result and enforce bounds
       if (isNaN(limit) || limit < 1) limit = 20;
@@ -112,6 +123,11 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
+      // KARMA-P1 FIX: Verify ownership.
+      if (req.userId !== userId) {
+        res.status(403).json({ error: 'Access denied: you can only view your own level info' });
+        return;
+      }
       const levelInfo = await getLevelInfo(userId);
       res.json(levelInfo);
     } catch (err) {

@@ -89,7 +89,7 @@ export async function createEarnRecord(
       recordId: existing._id,
       idempotencyKey,
     });
-    return toResponse(existing as EarnRecordDocument);
+    return toResponse(existing as unknown as EarnRecordDocument);
   }
 
   // Snapshot level and conversion rate from KarmaProfile
@@ -151,7 +151,7 @@ export async function createEarnRecord(
 export async function getEarnRecord(recordId: string): Promise<EarnRecordResponse | null> {
   const record = await EarnRecord.findById(recordId).lean();
   if (!record) return null;
-  return toResponse(record as EarnRecordDocument);
+  return toResponse(record as unknown as EarnRecordDocument);
 }
 
 /**
@@ -181,7 +181,7 @@ export async function getUserEarnRecords(
   ]);
 
   return {
-    records: records.map((r) => toResponse(r as EarnRecordDocument)),
+    records: records.map((r) => toResponse(r as unknown as EarnRecordDocument)),
     total,
     page,
     hasMore: skip + records.length < total,
@@ -193,7 +193,7 @@ export async function getUserEarnRecords(
  */
 export async function getRecordsByBatch(batchId: string): Promise<EarnRecordResponse[]> {
   const records = await EarnRecord.find({ batchId }).sort({ createdAt: -1 }).lean();
-  return records.map((r) => toResponse(r as EarnRecordDocument));
+  return records.map((r) => toResponse(r as unknown as EarnRecordDocument));
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ export async function updateEarnRecordStatus(
     to: status,
   });
 
-  return toResponse(updated as EarnRecordDocument);
+  return toResponse(updated as unknown as EarnRecordDocument);
 }
 
 /**
@@ -258,7 +258,7 @@ export async function getPendingConversionRecords(): Promise<EarnRecordResponse[
     status: 'APPROVED_PENDING_CONVERSION',
   }).sort({ approvedAt: 1 }).lean();
 
-  return records.map((r) => toResponse(r as EarnRecordDocument));
+  return records.map((r) => toResponse(r as unknown as EarnRecordDocument));
 }
 
 // ---------------------------------------------------------------------------
@@ -342,23 +342,23 @@ import type mongoose from 'mongoose';
 
 function toResponse(doc: EarnRecordDocument): EarnRecordResponse {
   return {
-    id: (doc._id as mongoose.Types.ObjectId).toString(),
-    userId: doc.userId,
-    eventId: doc.eventId,
-    bookingId: doc.bookingId,
+    id: (doc._id as unknown as mongoose.Types.ObjectId).toString(),
+    userId: (doc.userId as unknown as string | mongoose.Types.ObjectId).toString(),
+    eventId: (doc.eventId as unknown as string | mongoose.Types.ObjectId).toString(),
+    bookingId: (doc.bookingId as unknown as string | mongoose.Types.ObjectId).toString(),
     karmaEarned: doc.karmaEarned,
     activeLevelAtApproval: doc.activeLevelAtApproval as Level,
     conversionRate: doc.conversionRateSnapshot,
-    csrPoolId: doc.csrPoolId,
+    csrPoolId: (doc.csrPoolId as unknown as string | mongoose.Types.ObjectId).toString(),
     verificationSignals: doc.verificationSignals as VerificationSignals,
     confidenceScore: doc.confidenceScore,
     status: doc.status as EarnRecordStatus,
     createdAt: doc.createdAt,
-    approvedAt: doc.approvedAt,
+    approvedAt: doc.approvedAt ?? new Date(),
     convertedAt: doc.convertedAt,
-    convertedBy: doc.convertedBy,
-    batchId: doc.batchId,
-    rezCoinsEarned: doc.rezCoinsEarned,
+    convertedBy: doc.convertedBy ? (doc.convertedBy as unknown as string | mongoose.Types.ObjectId).toString() : undefined,
+    batchId: doc.batchId ? (doc.batchId as unknown as string | mongoose.Types.ObjectId).toString() : undefined,
+    rezCoinsEarned: doc.rezCoinsEarned ?? 0,
     idempotencyKey: doc.idempotencyKey,
   };
 }

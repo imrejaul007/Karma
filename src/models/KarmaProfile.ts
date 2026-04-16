@@ -50,9 +50,9 @@ export interface IKarmaProfile {
   activityHistory: Date[];
   createdAt: Date;
   updatedAt: Date;
-  // G-KS-A1 FIX: Add lastDecayAppliedAt field.
+  // G-KS-A1 FIX: Track when decay was last applied to prevent double-decay.
   lastDecayAppliedAt?: Date;
-  // G-KS-M32 FIX: Add userTimezone field.
+  // G-KS-M32 FIX: Store user's timezone for decay calculations.
   userTimezone?: string;
 }
 

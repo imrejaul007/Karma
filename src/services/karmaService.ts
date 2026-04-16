@@ -11,7 +11,7 @@
 import moment from 'moment';
 import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
-import { redisClient as redis } from '../config/redis.js';
+import { redis } from '../config/redis.js';
 import {
   KarmaProfile,
   EarnRecord,
@@ -324,8 +324,13 @@ export async function applyDecayToAll(): Promise<{
     const lockKey = `decay-lock:${userId}`;
     const lockToken = randomUUID();
 
-    // BE-KAR-009 FIX: Acquire distributed lock (10s TTL)
-    const lockAcquired = await redis.set(lockKey, lockToken, 'NX', 'EX', 10);
+    // BE-KAR-009 FIX: Acquire distributed lock using setnx + expire (ioredis-compatible).
+    // Using set(key, value, 'NX', 'EX', 10) triggers a TypeScript overload resolution error
+    // because ioredis types don't support NX and EX as positional args in the same call.
+    const lockAcquired = await redis.setnx(lockKey, lockToken);
+    if (lockAcquired) {
+      await redis.expire(lockKey, 10);
+    }
     if (!lockAcquired) {
       // Another process is decaying this user, skip
       logger.debug(`Decay lock contention on user ${userId}, skipping`);

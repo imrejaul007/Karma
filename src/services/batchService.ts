@@ -289,7 +289,7 @@ export async function getBatchPreview(batchId: string): Promise<BatchPreview | n
   const recordsWithCap: EarnRecordData[] = await Promise.all(
     records.map(async (r) => {
       const rawCoins = Math.floor(r.karmaEarned * r.conversionRateSnapshot);
-      const weeklyUsed = await getWeeklyCoinsUsed(r.userId, r.approvedAt);
+      const weeklyUsed = await getWeeklyCoinsUsed(r.userId, r.approvedAt ?? new Date());
       const capped = applyCapsToRecord(
         { karmaEarned: r.karmaEarned, conversionRateSnapshot: r.conversionRateSnapshot },
         weeklyUsed,
@@ -308,14 +308,14 @@ export async function getBatchPreview(batchId: string): Promise<BatchPreview | n
 
   const totalEstimated = recordsWithCap.reduce((sum, r) => sum + r.estimatedCoins, 0);
   const totalCapped = recordsWithCap.reduce((sum, r) => sum + r.cappedCoins, 0);
-  const anomalies = await checkBatchAnomalies(batchId, batch.csrPoolId, batch.weekStart, batch.weekEnd);
+  const anomalies = await checkBatchAnomalies(batchId, batch.csrPoolId.toString(), batch.weekStart, batch.weekEnd);
 
   return {
     batch: {
       _id: batch._id.toString(),
       weekStart: batch.weekStart,
       weekEnd: batch.weekEnd,
-      csrPoolId: batch.csrPoolId,
+      csrPoolId: batch.csrPoolId.toString(),
       status: batch.status,
       totalEarnRecords: batch.totalEarnRecords,
       totalKarma: batch.totalKarma,
@@ -442,7 +442,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
 
       // Compute capped coins
       const rawCoins = Math.floor(record.karmaEarned * record.conversionRateSnapshot);
-      const weeklyUsed = await getWeeklyCoinsUsed(record.userId, record.approvedAt);
+      const weeklyUsed = await getWeeklyCoinsUsed(record.userId, record.approvedAt ?? new Date());
       const cappedCoins = applyCapsToRecord(
         { karmaEarned: record.karmaEarned, conversionRateSnapshot: record.conversionRateSnapshot },
         weeklyUsed,
@@ -450,7 +450,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
 
       // Credit wallet
       const creditResult = await creditUserWallet({
-        userId: record.userId,
+        userId: record.userId.toString(),
         amount: cappedCoins,
         coinType: 'rez',
         source: 'karma_conversion',
@@ -550,7 +550,7 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
   await notifyUsersOfConversion(
     convertedRecords.map((r) => ({
       _id: r._id.toString(),
-      userId: r.userId,
+      userId: r.userId.toString(),
       karmaEarned: r.karmaEarned,
       conversionRateSnapshot: r.conversionRateSnapshot,
       status: r.status,
@@ -593,7 +593,8 @@ export function applyCapsToRecord(
 /**
  * Get total ReZ coins issued to a user this week (ISO week).
  */
-async function getWeeklyCoinsUsed(userId: string, weekOf: Date): Promise<number> {
+async function getWeeklyCoinsUsed(userId: string | Types.ObjectId, weekOf: Date): Promise<number> {
+  const userIdStr = userId instanceof Types.ObjectId ? userId.toString() : userId;
   const weekStart = moment(weekOf).startOf('isoWeek').toDate();
   const weekEnd = moment(weekOf).endOf('isoWeek').toDate();
 
@@ -625,9 +626,7 @@ export async function checkBatchAnomalies(
   const flags: AnomalyFlag[] = [];
 
   // Flag 1: Too many records from one NGO in the batch period
-  const ngoCounts = await EarnRecord.aggregate<
-    Array<{ _id: string | null; count: number }>
-  >([
+  const ngoCountsRaw = await EarnRecord.aggregate([
     {
       $match: {
         csrPoolId,
@@ -646,20 +645,18 @@ export async function checkBatchAnomalies(
     { $unwind: { path: '$event', preserveNullAndEmptyArrays: true } },
     { $group: { _id: '$event.ngoId', count: { $sum: 1 } } },
     { $match: { count: { $gt: 50 } } },
-  ]);
+  ]) as Array<{ _id: unknown; count: number }>;
 
-  if (ngoCounts.length > 0) {
+  if (ngoCountsRaw.length > 0) {
     flags.push({
       type: 'too_many_from_one_ngo',
-      count: ngoCounts.reduce((sum, g) => sum + g.count, 0),
+      count: ngoCountsRaw.reduce((sum, g) => sum + g.count, 0),
       resolved: false,
     });
   }
 
   // Flag 2: Suspicious timestamps — identical approval times across many records
-  const timestampCounts = await EarnRecord.aggregate<
-    Array<{ _id: Date | null; count: number }>
-  >([
+  const timestampCounts = await EarnRecord.aggregate([
     {
       $match: {
         csrPoolId,

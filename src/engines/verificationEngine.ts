@@ -286,12 +286,13 @@ export async function processCheckIn(
 ): Promise<CheckInResult> {
   try {
     // Find the user's booking for this event
-    const booking = await EventBookingModel.findOne({ userId, eventId }).lean();
+    const booking = await EventBookingModel.findOne({ userId, eventId }).lean() as (Record<string, unknown> & { _id: mongoose.Types.ObjectId }) | null;
     if (!booking) {
       return { success: false, error: 'No booking found for this user and event' };
     }
 
-    if ((booking as Record<string, unknown>).qrCheckedIn) {
+    const bookingDoc = booking as Record<string, unknown>;
+    if (bookingDoc.qrCheckedIn) {
       return { success: false, error: 'Already checked in' };
     }
 
@@ -300,8 +301,8 @@ export async function processCheckIn(
       qr_in: false,
       qr_out: false,
       gps_match: 0,
-      ngo_approved: Boolean((booking as Record<string, unknown>).ngoApproved),
-      photo_proof: Boolean((booking as Record<string, unknown>).photoProofUrl),
+      ngo_approved: Boolean(bookingDoc.ngoApproved),
+      photo_proof: Boolean(bookingDoc.photoProofUrl),
     };
 
     if (mode === 'qr' && qrCode) {
@@ -316,11 +317,11 @@ export async function processCheckIn(
     if (gpsCoords) {
       // Look up event GPS radius (default 100m)
       const gpsMatch = checkGPSProximity(
-        (booking as Record<string, unknown>).eventLatitude as number ?? 0,
-        (booking as Record<string, unknown>).eventLongitude as number ?? 0,
+        bookingDoc.eventLatitude as number ?? 0,
+        bookingDoc.eventLongitude as number ?? 0,
         gpsCoords.lat,
         gpsCoords.lng,
-        (booking as Record<string, unknown>).gpsRadius as number ?? 100,
+        bookingDoc.gpsRadius as number ?? 100,
       );
       signals.gps_match = gpsMatch;
     }
@@ -337,9 +338,10 @@ export async function processCheckIn(
       confidenceScore,
     };
 
-    await EventBookingModel.findByIdAndUpdate(booking._id, updateFields);
+    const bookingId = booking._id as mongoose.Types.ObjectId;
+    await EventBookingModel.findByIdAndUpdate(bookingId, updateFields);
 
-    const updatedBooking = await EventBookingModel.findById(booking._id).lean();
+    const updatedBooking = (await EventBookingModel.findById(bookingId).lean()) as Record<string, unknown> | null;
 
     logger.info('[VerificationEngine] Check-in processed', {
       userId,
@@ -382,16 +384,17 @@ export async function processCheckOut(
   gpsCoords?: GPSCoords,
 ): Promise<CheckOutResult> {
   try {
-    const booking = await EventBookingModel.findOne({ userId, eventId }).lean();
+    const booking = await EventBookingModel.findOne({ userId, eventId }).lean() as (Record<string, unknown> & { _id: mongoose.Types.ObjectId }) | null;
     if (!booking) {
       return { success: false, error: 'No booking found for this user and event' };
     }
 
-    if ((booking as Record<string, unknown>).qrCheckedOut) {
+    const checkoutBookingDoc = booking as Record<string, unknown>;
+    if (checkoutBookingDoc.qrCheckedOut) {
       return { success: false, error: 'Already checked out' };
     }
 
-    const raw = booking as Record<string, unknown>;
+    const raw = checkoutBookingDoc;
 
     // Build signals from accumulated data
     const signals: VerificationSignals = {
@@ -445,7 +448,8 @@ export async function processCheckOut(
       confidenceScore,
     };
 
-    await EventBookingModel.findByIdAndUpdate(booking._id, updateFields);
+    const checkoutBookingId = booking._id as mongoose.Types.ObjectId;
+    await EventBookingModel.findByIdAndUpdate(checkoutBookingId, updateFields);
 
     let earnRecord: Record<string, unknown> | undefined;
 
@@ -464,7 +468,7 @@ export async function processCheckOut(
       earnRecord = record as unknown as Record<string, unknown>;
     }
 
-    const updatedBooking = await EventBookingModel.findById(booking._id).lean();
+    const updatedBooking = (await EventBookingModel.findById(checkoutBookingId).lean()) as Record<string, unknown> | null;
 
     logger.info('[VerificationEngine] Check-out processed', {
       userId,

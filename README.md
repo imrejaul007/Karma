@@ -40,7 +40,7 @@ This **IS:** Modern, reward-driven, lifestyle-integrated, fintech-clean
 
 > **Think: Headspace meets Robinhood.** Purpose meets reward.
 
-Full brand brief: [`docs/BRAND_IDENTITY.md`](docs/BRAND_IDENTITY.md)
+Full brand brief: [`docs/Karma-by-ReZ/BRAND_IDENTITY.md`](docs/Karma-by-ReZ/BRAND_IDENTITY.md)
 
 ## Architecture
 

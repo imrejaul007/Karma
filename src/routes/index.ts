@@ -6,11 +6,23 @@ const router = Router();
 // Health check route — GET /health (additional to /health already in index.ts)
 router.use('/health', healthRouter);
 
-// NOTE: All /api/karma/* routes are mounted directly in index.ts via:
-//   app.use('/api/karma', karmaRoutes);
-//   app.use('/api/karma/verify', verifyRoutes);
-//   app.use('/api/karma/batch', batchRoutes);
-// This routes/index.ts (mounted at /) only handles paths not covered by those mounts.
+// ── Phase 2+ routes (registered as stubs, implemented in later phases) ──────────
+
+// Karma user routes — GET /api/karma/user/:userId, POST /api/karma/earn
+// (implemented by other agents in later phases)
+router.use('/api/karma', (_req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+});
+
+// Verification routes — POST /api/karma/verify/checkin, POST /api/karma/verify/checkout
+router.use('/api/karma/verify', (_req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+});
+
+// Batch routes — GET /api/karma/batch, POST /api/karma/batch/:id/preview, POST /api/karma/batch/:id/execute
+router.use('/api/karma/batch', (_req, res) => {
+  res.status(501).json({ success: false, message: 'Not yet implemented' });
+});
 
 // Leaderboard — GET /api/karma/leaderboard (Phase 2)
 router.get('/api/karma/leaderboard', (_req, res) => {

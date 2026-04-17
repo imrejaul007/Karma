@@ -65,7 +65,6 @@ async function runWeeklyBatchCreation(): Promise<void> {
     // to silently stop until a restart.
   } finally {
     await redis.del(LOCK_KEY).catch(() => {});
-
   }
 }
 

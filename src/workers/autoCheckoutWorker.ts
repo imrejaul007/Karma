@@ -18,6 +18,7 @@ import { CronJob } from 'cron';
 import moment from 'moment';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger.js';
+import { redis } from '../config/redis.js';
 import { getConversionRate } from '../engines/karmaEngine.js';
 import { EarnRecord } from '../models/EarnRecord.js';
 import { KarmaProfile } from '../models/KarmaProfile.js';
@@ -72,17 +73,25 @@ export interface AutoCheckoutResult {
 export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
   const result: AutoCheckoutResult = { processed: 0, checkedOut: 0, skipped: 0, errors: [] };
 
+  // CRON-001 FIX: Distributed lock to prevent duplicate execution across instances.
+  const LOCK_KEY = 'rez-karma:auto-checkout-lock';
+  const LOCK_TTL = 300; // 5 minutes
+  const lockAcquired = await redis.set(LOCK_KEY, 'locked', 'EX', LOCK_TTL, 'NX');
+  if (!lockAcquired) {
+    logger.info('[AutoCheckoutWorker] Skipped — another instance holds the lock');
+    return result;
+  }
+
   try {
-    // Find all bookings that are checked in but not checked out
-    const bookings = await EventBookingModel.find({
-      qrCheckedIn: true,
-      qrCheckedOut: false,
-    }).lean();
+    // CRON-005 FIX: Paginated cursor to avoid loading all bookings into memory at once.
+    const PAGE_SIZE = 100;
+    const query = { qrCheckedIn: true, qrCheckedOut: false };
+    let processedCount = 0;
 
-    result.processed = bookings.length;
-    logger.info(`[AutoCheckoutWorker] Scanning ${bookings.length} pending bookings`);
+    let cursor = EventBookingModel.find(query).lean().batchSize(PAGE_SIZE).cursor({ batchSize: PAGE_SIZE });
 
-    for (const booking of bookings) {
+    for await (const booking of cursor) {
+      processedCount++;
       const typedBooking = booking as unknown as { _id: mongoose.Types.ObjectId };
       const raw = booking as Record<string, unknown>;
       try {
@@ -199,8 +208,9 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
           error: err,
         });
       }
-    }
+    } // end for-await cursor
 
+    result.processed = processedCount;
     logger.info('[AutoCheckoutWorker] Scan complete', result);
     return result;
   } catch (err) {
@@ -208,6 +218,8 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
     result.errors.push(`Scan failed: ${errorMsg}`);
     logger.error('[AutoCheckoutWorker] Scan failed', { error: err });
     return result;
+  } finally {
+    await redis.del(LOCK_KEY).catch(() => {});
   }
 }
 

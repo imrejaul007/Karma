@@ -45,12 +45,13 @@ async function runWeeklyBatchCreation(): Promise<void> {
       totalEstimatedCoins: totalCoins,
       batchIds: batches.map((b) => b._id.toString()),
     });
-  } catch (err) {
+<  } catch (err) {
     log.error('[BatchScheduler] Weekly batch creation failed', {
       error: (err as Error).message,
       stack: (err as Error).stack,
     });
-    // Don't rethrow — keep the cron job alive for the next scheduled run
+  } finally {
+    await redis.del(LOCK_KEY).catch(() => {});
   }
 }
 

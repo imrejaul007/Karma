@@ -97,8 +97,12 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
       try {
         const eventId = raw.eventId as string;
 
-        // Look up event to determine end time
-        const event = await KarmaEvent.findById(eventId).lean() as KarmaEventDocument | null;
+        // Look up event to determine end time.
+        // CR-03 FIX: eventId is a merchant-service ObjectId, NOT a karma-service KarmaEvent._id.
+        // KarmaEvent._id is karma's own ID; the cross-reference field is merchantEventId.
+        // Previous code used findById(eventId) which queried karma's collection with merchant IDs —
+        // always returned null, skipping every booking. Fixed to use findOne({ merchantEventId }).
+        const event = await KarmaEvent.findOne({ merchantEventId: eventId }).lean() as KarmaEventDocument | null;
 
         if (!event) {
           result.skipped++;
@@ -149,7 +153,10 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
 
           // Check for existing record (idempotent)
           const existing = await EarnRecord.findOne({ idempotencyKey }).lean();
-          if (!existing) {
+          // CR-03 FIX: Skip EarnRecord creation if csrPoolId is missing.
+          // Zero ObjectId would create orphaned records with no pool reference.
+          const validCsrPoolId = raw.csrPoolId ? new mongoose.Types.ObjectId(raw.csrPoolId as string) : null;
+          if (!existing && validCsrPoolId) {
             const record = new EarnRecord({
               userId: new mongoose.Types.ObjectId(raw.userId as string),
               eventId: new mongoose.Types.ObjectId(eventId),
@@ -157,7 +164,7 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
               karmaEarned,
               activeLevelAtApproval: level as 'L1' | 'L2' | 'L3' | 'L4',
               conversionRateSnapshot: conversionRate,
-              csrPoolId: new mongoose.Types.ObjectId(raw.csrPoolId as string || '000000000000000000000000'),
+              csrPoolId: validCsrPoolId,
               verificationSignals: {
                 qr_in: true,           // User did check in
                 qr_out: false,         // No QR checkout

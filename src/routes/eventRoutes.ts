@@ -1,0 +1,355 @@
+/**
+ * Event Routes — Karma event discovery and booking
+ *
+ * GET  /api/karma/events              — list nearby karma events (with filters)
+ * GET  /api/karma/event/:eventId     — single event detail
+ * POST /api/karma/event/join         — join an event
+ * DELETE /api/karma/event/:eventId/leave — cancel booking
+ */
+import { Router, Request, Response } from 'express';
+import mongoose from 'mongoose';
+import { requireAuth } from '../middleware/auth.js';
+import { KarmaEvent } from '../models/index.js';
+import { EventBookingModel } from '../engines/verificationEngine.js';
+import { merchantServiceUrl } from '../config/index.js';
+import { logger } from '../utils/logger.js';
+
+const router = Router();
+
+// Plain object type for lean() results
+type PlainKarmaEvent = {
+  _id: mongoose.Types.ObjectId;
+  merchantEventId: mongoose.Types.ObjectId;
+  category: string;
+  status: string;
+  impactUnit: string;
+  impactMultiplier: number;
+  difficulty: string;
+  expectedDurationHours: number;
+  baseKarmaPerHour: number;
+  maxKarmaPerEvent: number;
+  qrCodes: { checkIn: string; checkOut: string };
+  gpsRadius: number;
+  maxVolunteers: number;
+  confirmedVolunteers: number;
+  createdAt: Date;
+};
+
+function toKarmaEventResponse(doc: PlainKarmaEvent, isJoined?: boolean) {
+  return {
+    _id: doc._id.toString(),
+    merchantEventId: doc.merchantEventId.toString(),
+    category: doc.category,
+    status: doc.status,
+    impactUnit: doc.impactUnit,
+    impactMultiplier: doc.impactMultiplier,
+    difficulty: doc.difficulty,
+    expectedDurationHours: doc.expectedDurationHours,
+    baseKarmaPerHour: doc.baseKarmaPerHour,
+    maxKarmaPerEvent: doc.maxKarmaPerEvent,
+    qrCodes: doc.qrCodes,
+    gpsRadius: doc.gpsRadius,
+    maxVolunteers: doc.maxVolunteers,
+    confirmedVolunteers: doc.confirmedVolunteers,
+    verificationMode: doc.qrCodes?.checkIn ? 'qr' : 'gps',
+    isJoined: isJoined ?? false,
+    createdAt: doc.createdAt,
+  };
+}
+
+async function enrichWithMerchantEvent(
+  events: PlainKarmaEvent[],
+  userId: string,
+): Promise<Record<string, unknown>[]> {
+  const merchantEventIds = events.map((e) => e.merchantEventId.toString());
+
+  const bookings = await EventBookingModel.find({
+    userId: new mongoose.Types.ObjectId(userId),
+    eventId: { $in: merchantEventIds },
+    status: { $in: ['pending', 'confirmed', 'checked_in'] },
+  }).lean();
+  const joinedEventIds = new Set<string>();
+  for (const b of bookings) {
+    joinedEventIds.add(b.eventId.toString());
+  }
+
+  if (!merchantServiceUrl) {
+    return events.map((e) => ({
+      ...toKarmaEventResponse(e, joinedEventIds.has(e._id.toString())),
+      name: 'Event',
+      description: '',
+      organizer: { name: 'ReZ Partner' },
+    }));
+  }
+
+  try {
+    const { default: axios } = await import('axios');
+    const response = await axios.get<{ events: Record<string, unknown>[] }>(
+      `${merchantServiceUrl}/api/events/batch`,
+      {
+        params: { ids: merchantEventIds.join(',') },
+        timeout: 3000,
+      },
+    );
+
+    const merchantEventsMap = new Map<string, Record<string, unknown>>();
+    for (const ev of response.data.events ?? []) {
+      const id = (ev._id as string) || (ev.id as string);
+      if (id) merchantEventsMap.set(id, ev);
+    }
+
+    return events.map((ke) => {
+      const merchantEv = merchantEventsMap.get(ke.merchantEventId.toString()) ?? {};
+      return {
+        ...toKarmaEventResponse(ke, joinedEventIds.has(ke._id.toString())),
+        _id: ke.merchantEventId.toString(),
+        name: merchantEv.name ?? 'Event',
+        description: merchantEv.description ?? '',
+        image: merchantEv.image,
+        date: merchantEv.date ?? merchantEv.startDate,
+        time: merchantEv.time ?? merchantEv.startTime,
+        location: merchantEv.location,
+        organizer: merchantEv.organizer,
+        impactUnit: ke.impactUnit,
+        impactMultiplier: ke.impactMultiplier,
+      };
+    });
+  } catch (err) {
+    logger.warn('Failed to enrich events with merchant data', { error: err });
+    return events.map((e) => ({
+      ...toKarmaEventResponse(e, joinedEventIds.has(e._id.toString())),
+      name: 'Event',
+      description: '',
+      organizer: { name: 'ReZ Partner' },
+    }));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/events
+// ---------------------------------------------------------------------------
+
+router.get('/events', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { category, status } = req.query;
+
+    const filter: Record<string, unknown> = {};
+    filter.status = { $in: ['published', 'ongoing'] };
+
+    if (category && typeof category === 'string') {
+      filter.category = category;
+    }
+    if (status && typeof status === 'string') {
+      filter.status = { $in: status.split(',').map((s) => s.trim()) };
+    }
+
+    const events = await KarmaEvent.find(filter).limit(100).lean() as unknown as PlainKarmaEvent[];
+    const enriched = await enrichWithMerchantEvent(events, req.userId ?? '');
+
+    res.json({ success: true, events: enriched, total: enriched.length });
+  } catch (err) {
+    logger.error('[eventRoutes] GET /events error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch events' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/event/:eventId
+// ---------------------------------------------------------------------------
+
+router.get('/event/:eventId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.userId ?? '';
+
+    const karmaEvent = await KarmaEvent.findOne({
+      $or: [
+        { _id: eventId },
+        { merchantEventId: eventId },
+      ],
+    }).lean() as unknown as (PlainKarmaEvent & Record<string, unknown>) | null;
+
+    if (!karmaEvent) {
+      res.status(404).json({ success: false, message: 'Event not found' });
+      return;
+    }
+
+    const booking = await EventBookingModel.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+      eventId,
+      status: { $in: ['pending', 'confirmed', 'checked_in'] },
+    }).lean();
+
+    const isJoined = !!booking;
+
+    let enriched: Record<string, unknown> = {
+      ...toKarmaEventResponse(karmaEvent as unknown as PlainKarmaEvent, isJoined),
+      name: 'Event',
+      description: '',
+      organizer: { name: 'ReZ Partner' },
+    };
+
+    try {
+      const { default: axios } = await import('axios');
+      const response = await axios.get<Record<string, unknown>>(
+        `${merchantServiceUrl}/api/events/${eventId}`,
+        { timeout: 3000 },
+      );
+      enriched = {
+        ...enriched,
+        ...response.data,
+        _id: eventId,
+        isJoined,
+        qrCodes: karmaEvent.qrCodes,
+        capacity: {
+          goal: karmaEvent.maxVolunteers,
+          enrolled: karmaEvent.confirmedVolunteers,
+        },
+      };
+    } catch {
+      // Merchant service unavailable — return minimal data
+    }
+
+    res.json({ success: true, event: enriched });
+  } catch (err) {
+    logger.error('[eventRoutes] GET /event/:eventId error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch event' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/event/join
+// ---------------------------------------------------------------------------
+
+router.post('/event/join', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId ?? '';
+    const { eventId } = req.body as { eventId?: string };
+
+    if (!eventId || typeof eventId !== 'string') {
+      res.status(400).json({ success: false, message: 'eventId is required' });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      res.status(400).json({ success: false, message: 'Invalid eventId format' });
+      return;
+    }
+
+    const karmaEvent = await KarmaEvent.findOne({
+      $or: [{ _id: eventId }, { merchantEventId: eventId }],
+      status: { $in: ['published', 'ongoing'] },
+    }).lean() as unknown as (PlainKarmaEvent & { _id: mongoose.Types.ObjectId }) | null;
+
+    if (!karmaEvent) {
+      res.status(404).json({ success: false, message: 'Event not found or not joinable' });
+      return;
+    }
+
+    if (
+      karmaEvent.maxVolunteers > 0 &&
+      karmaEvent.confirmedVolunteers >= karmaEvent.maxVolunteers
+    ) {
+      res.status(409).json({ success: false, message: 'Event is at full capacity' });
+      return;
+    }
+
+    const existing = await EventBookingModel.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+      eventId,
+      status: { $in: ['pending', 'confirmed', 'checked_in'] },
+    }).lean() as unknown as ({ _id: mongoose.Types.ObjectId } & Record<string, unknown>) | null;
+
+    if (existing) {
+      res.status(409).json({
+        success: false,
+        message: 'Already joined this event',
+        bookingId: existing._id.toString(),
+      });
+      return;
+    }
+
+    const booking = await EventBookingModel.create({
+      userId: new mongoose.Types.ObjectId(userId),
+      eventId,
+      status: 'confirmed',
+      bookingReference: `BK-${Date.now()}-${userId.slice(-4)}`,
+      qrCheckedIn: false,
+      qrCheckedOut: false,
+      ngoApproved: false,
+      confidenceScore: 0,
+      verificationStatus: 'pending',
+      karmaEarned: 0,
+      qrCodes: karmaEvent.qrCodes,
+    });
+
+    await KarmaEvent.updateOne(
+      { _id: karmaEvent._id },
+      { $inc: { confirmedVolunteers: 1 } },
+    );
+
+    res.status(201).json({
+      success: true,
+      booking: {
+        _id: (booking._id as mongoose.Types.ObjectId).toString(),
+        eventId: booking.eventId,
+        bookingReference: booking.bookingReference,
+        status: booking.status,
+        qrCheckedIn: booking.qrCheckedIn,
+        qrCheckedOut: booking.qrCheckedOut,
+        qrCodes: booking.qrCodes,
+        ngoApproved: booking.ngoApproved,
+        confidenceScore: booking.confidenceScore,
+        verificationStatus: booking.verificationStatus,
+        karmaEarned: booking.karmaEarned,
+        createdAt: (booking as unknown as { createdAt: Date }).createdAt,
+      },
+    });
+  } catch (err) {
+    logger.error('[eventRoutes] POST /event/join error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to join event' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/karma/event/:eventId/leave
+// ---------------------------------------------------------------------------
+
+router.delete('/event/:eventId/leave', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId ?? '';
+    const { eventId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      res.status(400).json({ success: false, message: 'Invalid eventId format' });
+      return;
+    }
+
+    const booking = await EventBookingModel.findOneAndUpdate(
+      {
+        userId: new mongoose.Types.ObjectId(userId),
+        eventId,
+        status: { $in: ['pending', 'confirmed'] },
+      },
+      { $set: { status: 'cancelled' } },
+      { new: true },
+    ).lean();
+
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'No active booking found for this event' });
+      return;
+    }
+
+    await KarmaEvent.updateOne(
+      { $or: [{ _id: eventId }, { merchantEventId: eventId }] },
+      { $inc: { confirmedVolunteers: -1 } },
+    );
+
+    res.json({ success: true, message: 'Booking cancelled successfully' });
+  } catch (err) {
+    logger.error('[eventRoutes] DELETE /event/:eventId/leave error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to cancel booking' });
+  }
+});
+
+export default router;

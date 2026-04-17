@@ -17,6 +17,9 @@ import routes from './routes';
 import karmaRoutes from './routes/karmaRoutes';
 import verifyRoutes from './routes/verifyRoutes';
 import batchRoutes from './routes/batchRoutes';
+import eventRoutes from './routes/eventRoutes';
+import walletRoutes from './routes/walletRoutes';
+import bookingRoutes from './routes/bookingRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
 
 const app = express();
@@ -114,6 +117,9 @@ app.use('/', routes);
 app.use('/api/karma', karmaRoutes);
 app.use('/api/karma/verify', verifyRoutes);
 app.use('/api/karma/batch', batchRoutes);
+app.use('/api/karma', eventRoutes);
+app.use('/api/karma', walletRoutes);
+app.use('/api/karma', bookingRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────────────────
 

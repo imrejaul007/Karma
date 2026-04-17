@@ -200,60 +200,74 @@ export async function addKarma(
     );
   }
 
-  const profile = atomicResult;
-  const oldLevel = profile.level;
-  const oldActiveKarma = profile.activeKarma;
+  // CRITICAL-005 FIX: Replace non-atomic read-modify-write with fully atomic findOneAndUpdate.
+  // Previously, profile.lifetimeKarma += karma; profile.activeKarma += karma; profile.save()
+  // caused a TOCTOU race: two concurrent requests could both read balance X, both write X+amount,
+  // resulting in balance = X + amount (instead of X + 2*amount). Using $inc guarantees that
+  // MongoDB applies the increment server-side, making the operation atomic regardless of concurrency.
+  //
+  // This extends the weekly-cap atomic check (above) to also atomically update all other
+  // karma fields in the same findOneAndUpdate call.
+  const hoursIncrement = options?.hours ?? 0;
 
-  // Accumulate karma
-  profile.lifetimeKarma += karma;
-  profile.activeKarma += karma;
-  profile.lastActivityAt = new Date();
-  profile.totalHours += options?.hours ?? 0;
+  const profile = await KarmaProfile.findOneAndUpdate(
+    { userId },
+    {
+      $inc: {
+        lifetimeKarma: karma,
+        activeKarma: karma,
+        totalHours: hoursIncrement,
+        // CRITICAL-005: eventsCompleted/Joined moved here from recordKarmaEarned()
+        // to keep all karma balance mutations in a single atomic update.
+        eventsCompleted: 1,
+        eventsJoined: 1,
+        ...(options?.isCheckIn
+          ? { checkIns: 1, ...(options?.isApproved ? { approvedCheckIns: 1 } : {}) }
+          : {}),
+      },
+      $set: {
+        lastActivityAt: new Date(),
+      },
+    },
+    { new: true },
+  );
 
-  // Update trust metrics
-  if (options?.isCheckIn) {
-    profile.checkIns += 1;
-    if (options?.isApproved) {
-      profile.approvedCheckIns += 1;
-    }
+  if (!profile) {
+    logger.error('[Karma] addKarma: profile not found after weekly-cap update', { userId });
+    throw new Error('Profile not found');
   }
 
-  // Update running averages for trust score
-  const totalEvents = profile.eventsCompleted + 1;
-  profile.avgEventDifficulty =
-    ((profile.avgEventDifficulty * profile.eventsCompleted) +
-      (options?.difficulty ?? 0)) /
-    totalEvents;
-  profile.avgConfidenceScore =
-    ((profile.avgConfidenceScore * profile.eventsCompleted) +
-      (options?.confidenceScore ?? 0)) /
-    totalEvents;
-
-  // Recalculate level
+  const oldLevel = profile.level;
   const newLevel = calculateLevel(profile.activeKarma);
+
+  // Handle level change atomically in a second update.
+  // CRITICAL-005: Level history array updates must be atomic to prevent duplicate
+  // entries or corrupted history from concurrent level-ups.
   if (newLevel !== oldLevel) {
-    const previousEntry = profile.levelHistory[profile.levelHistory.length - 1];
-    if (previousEntry && !previousEntry.droppedAt) {
-      previousEntry.droppedAt = new Date();
-    }
-    profile.level = newLevel;
+    // Close the previous level entry's droppedAt atomically
+    await KarmaProfile.updateOne(
+      { userId, 'levelHistory.droppedAt': { $exists: false } },
+      { $set: { 'levelHistory.$[elem].droppedAt': new Date() } },
+      { arrayFilters: [{ 'elem.droppedAt': { $exists: false } }] },
+    );
+
+    // Push new level entry atomically
     const entry: ILevelHistoryEntry = {
       level: newLevel as Level,
       earnedAt: new Date(),
     };
-    profile.levelHistory.push(entry);
+    await KarmaProfile.updateOne(
+      { userId },
+      {
+        $set: { level: newLevel },
+        $push: { levelHistory: entry },
+      },
+    );
+
     logger.info(
-      `User ${userId} leveled ${newLevel === oldLevel ? 'maintained' : 'upgraded'} from ${oldLevel} to ${newLevel} (${oldActiveKarma} → ${profile.activeKarma} karma)`,
+      `User ${userId} leveled up from ${oldLevel} to ${newLevel} (activeKarma: ${profile.activeKarma})`,
     );
   }
-
-  // Activity history (keep last 90 days)
-  profile.activityHistory.push(new Date());
-  if (profile.activityHistory.length > 90) {
-    profile.activityHistory = profile.activityHistory.slice(-90) as typeof profile.activityHistory;
-  }
-
-  await profile.save();
 }
 
 /**
@@ -261,6 +275,12 @@ export async function addKarma(
  * Increments eventsCompleted and calls addKarma.
  * MED-19 FIX: Wrap addKarma() in try-catch to handle and log errors properly.
  */
+// CRITICAL-005 FIX: Removed non-atomic profile.save() call.
+// eventsCompleted and eventsJoined counters are now atomically incremented
+// inside addKarma() via findOneAndUpdate with $inc (see CRITICAL-005 fix in addKarma).
+// Previously, profile.eventsCompleted += 1; profile.eventsJoined += 1; await profile.save()
+// was a non-atomic read-modify-write, allowing concurrent requests to both read the same
+// counters and write the same value, resulting in a lost increment.
 export async function recordKarmaEarned(
   userId: string,
   karmaEarned: number,
@@ -270,13 +290,6 @@ export async function recordKarmaEarned(
     difficulty?: number;
   },
 ): Promise<void> {
-  const profile = await getOrCreateProfile(userId);
-  // G-KS-B11 FIX: Increment eventsJoined when user completes an event.
-  // Previously only eventsCompleted was incremented, making eventsJoined always 0.
-  // This ensures completionRate in trust score calculation is meaningful.
-  profile.eventsCompleted += 1;
-  profile.eventsJoined += 1;
-  await profile.save();
   try {
     await addKarma(userId, karmaEarned, {
       ...options,

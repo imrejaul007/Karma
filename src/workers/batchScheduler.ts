@@ -13,6 +13,7 @@ import { CronJob } from 'cron';
 import { createWeeklyBatch } from '../services/batchService.js';
 import { createServiceLogger } from '../config/logger.js';
 import { batchCronSchedule } from '../config/index.js';
+import { redis } from '../config/redis.js';
 
 const log = createServiceLogger('batchScheduler');
 
@@ -68,7 +69,21 @@ export function startBatchScheduler(): void {
   const schedule = batchCronSchedule;
   log.info('[BatchScheduler] Initializing cron job', { schedule });
 
-  job = new CronJob(schedule, runWeeklyBatchCreation);
+  // CRON-001 FIX: Distributed lock — prevents N× execution in multi-instance deploy
+  job = new CronJob(schedule, async () => {
+    const LOCK_KEY = 'rez-karma:batch-scheduler-lock';
+    const LOCK_TTL = 600; // 10 minutes
+    const lockAcquired = await redis.set(LOCK_KEY, '1', 'EX', LOCK_TTL, 'NX');
+    if (!lockAcquired) {
+      log.info('[BatchScheduler] Skipped — another instance holds the lock');
+      return;
+    }
+    try {
+      await runWeeklyBatchCreation();
+    } finally {
+      await redis.del(LOCK_KEY).catch(() => {});
+    }
+  });
 
   // Run on next tick to verify no immediate errors
   setImmediate(() => {

@@ -39,24 +39,25 @@ app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
 app.use(mongoSanitize());
 
-// Rate limiting — global per-IP limit using Redis store
-if (redis.status === 'ready' || redis.status === 'connect') {
-  app.use(
-    rateLimit({
-      windowMs: rateLimitWindowMs,
-      max: rateLimitMax,
-      standardHeaders: true,
-      legacyHeaders: false,
-      store: new RedisStore({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        sendCommand: async (...args: string[]): Promise<any> => {
-          return redis.call(...(args as [string, ...string[]]));
-        },
-      }),
-      message: { success: false, message: 'Too many requests, please try again later' },
+// Rate limiting — global per-IP limit using Redis store.
+// RATE-LIMIT-BYPASS FIX (2026-04-17): Always mount rate limiter.
+// When Redis is unavailable, express-rate-limit falls back to its built-in
+// in-memory store automatically instead of silently bypassing rate limiting.
+app.use(
+  rateLimit({
+    windowMs: rateLimitWindowMs,
+    max: rateLimitMax,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: new RedisStore({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sendCommand: async (...args: string[]): Promise<any> => {
+        return redis.call(...(args as [string, ...string[]]));
+      },
     }),
-  );
-}
+    message: { success: false, message: 'Too many requests, please try again later' },
+  }),
+);
 
 // ── Health Endpoints ───────────────────────────────────────────────────────────
 

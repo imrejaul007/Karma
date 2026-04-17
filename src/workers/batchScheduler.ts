@@ -29,6 +29,15 @@ type CronJobWithNextDate = CronJob & { nextDate: () => CronDateLike };
 async function runWeeklyBatchCreation(): Promise<void> {
   log.info('[BatchScheduler] Starting weekly batch creation...');
 
+  // FIX 7: Distributed lock to prevent duplicate execution across instances.
+  const LOCK_KEY = 'rez-karma:batch-scheduler-lock';
+  const LOCK_TTL = 300; // 5 minutes
+  const lockAcquired = await redis.set(LOCK_KEY, 'locked', 'EX', LOCK_TTL, 'NX');
+  if (!lockAcquired) {
+    log.info('[BatchScheduler] Skipped — another instance holds the lock');
+    return;
+  }
+
   try {
     const batches = await createWeeklyBatch();
 
@@ -51,8 +60,12 @@ async function runWeeklyBatchCreation(): Promise<void> {
       error: (err as Error).message,
       stack: (err as Error).stack,
     });
-    // Rethrow so BullMQ's error handler picks it up
-    throw err;
+    // CRON-002 FIX: Don't rethrow — keep the cron job alive for the next scheduled run.
+    // Rethrowing kills the worker after the first failure, causing weekly batch processing
+    // to silently stop until a restart.
+  } finally {
+    await redis.del(LOCK_KEY).catch(() => {});
+
   }
 }
 

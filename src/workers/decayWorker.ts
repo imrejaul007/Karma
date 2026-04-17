@@ -73,6 +73,15 @@ export async function runDecayJob(): Promise<{
 }> {
   logger.info('Starting daily karma decay job');
 
+  // FIX 6: Distributed lock to prevent duplicate execution across instances.
+  const LOCK_KEY = 'rez-karma:decay-lock';
+  const LOCK_TTL = 600; // 10 minutes — expected duration + buffer
+  const lockAcquired = await redis.set(LOCK_KEY, 'locked', 'EX', LOCK_TTL, 'NX');
+  if (!lockAcquired) {
+    logger.info('Decay job skipped — another instance holds the lock');
+    return { processed: 0, decayed: 0, levelDrops: 0 };
+  }
+
   try {
     const result = await applyDecayToAll();
     logger.info(
@@ -83,6 +92,8 @@ export async function runDecayJob(): Promise<{
   } catch (err) {
     logger.error('Decay job failed with error', { error: err });
     throw err;
+  } finally {
+    await redis.del(LOCK_KEY).catch(() => {});
   }
 }
 

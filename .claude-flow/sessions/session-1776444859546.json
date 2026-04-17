@@ -1,0 +1,14 @@
+{
+  "id": "session-1776444859546",
+  "startedAt": "2026-04-17T16:54:19.546Z",
+  "cwd": "/Users/rejaulkarim/Documents/ReZ Full App/rez-karma-service",
+  "context": {},
+  "metrics": {
+    "edits": 20,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-04-17T18:29:16.651Z",
+  "duration": 5697127
+}

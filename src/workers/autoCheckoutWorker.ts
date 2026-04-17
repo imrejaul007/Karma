@@ -291,9 +291,16 @@ export function startAutoCheckoutWorker(onComplete?: (result: AutoCheckoutResult
 
   cronJob = new CronJob('0 * * * *', async () => {
     logger.info('[AutoCheckoutWorker] Starting hourly scan...');
-    const result = await processForgottenCheckouts();
-    if (onComplete) {
-      onComplete(result);
+    try {
+      const result = await processForgottenCheckouts();
+      if (onComplete) {
+        onComplete(result);
+      }
+    } catch (err) {
+      // CRON-002 FIX: Wrap async cron callback in try-catch. node-cron does not await
+      // async callbacks — unhandled rejections from processForgottenCheckouts() would crash
+      // the worker process without this catch block.
+      logger.error('[AutoCheckoutWorker] Unhandled error in cron callback', { error: err });
     }
   });
 

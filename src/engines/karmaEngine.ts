@@ -130,8 +130,8 @@ export function getConversionRate(level: string): ConversionRate {
  * @returns Coins earned from conversion
  */
 export function convertKarmaToCoins(karma: number, level: Level): number {
-  if (typeof karma !== 'number' || karma < 0) {
-    throw new Error(`Invalid karma value: ${karma} (must be non-negative number)`);
+  if (typeof karma !== 'number' || !Number.isFinite(karma) || karma < 0) {
+    throw new Error(`Invalid karma value: ${karma} (must be a finite non-negative number)`);
   }
 
   const rate = getConversionRate(level);
@@ -163,9 +163,9 @@ export function calculateKarmaEarned(event: KarmaEvent, hours: number): number {
       `Invalid maxKarmaPerEvent: ${event.maxKarmaPerEvent} (must be positive)`
     );
   }
-  if (typeof hours !== 'number' || hours < 0) {
+  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours < 0) {
     throw new Error(
-      `Invalid hours: ${hours} (must be non-negative number)`
+      `Invalid hours: ${hours} (must be a finite non-negative number)`
     );
   }
 
@@ -253,7 +253,10 @@ export function applyDailyDecay(profile: KarmaProfile, userTimezone?: string): K
   }
 
   const oldLevel = profile.level;
-  const newActiveKarma = Math.floor(profile.activeKarma * (1 - decayRate));
+  // FIX: Clamp to 0 to ensure karma never goes negative and level calculation is correct.
+  // Previously, the engine returned unclamped values while the service layer clamped separately,
+  // which could cause the delta's newLevel to disagree with the actual stored karma.
+  const newActiveKarma = Math.max(0, Math.floor(profile.activeKarma * (1 - decayRate)));
   const newLevel = calculateLevel(newActiveKarma);
 
   return {
@@ -320,13 +323,16 @@ function calculateConsistencyScore(activityHistory: Date[]): number {
     return activityHistory.length === 1 ? 0.5 : 0;
   }
 
-  const sortedDays = activityHistory
-    .map((d) => moment(d).dayOfYear())
+  // FIX: Use absolute timestamps (epoch days) instead of dayOfYear() to avoid
+  // year-boundary wrapping bugs. dayOfYear() resets to 1 on Jan 1, producing
+  // negative gaps when activity spans Dec→Jan.
+  const sortedEpochDays = activityHistory
+    .map((d) => Math.floor(moment(d).valueOf() / 86_400_000))
     .sort((a, b) => a - b);
 
   const gaps: number[] = [];
-  for (let i = 1; i < sortedDays.length; i++) {
-    gaps.push(sortedDays[i] - sortedDays[i - 1]);
+  for (let i = 1; i < sortedEpochDays.length; i++) {
+    gaps.push(sortedEpochDays[i] - sortedEpochDays[i - 1]);
   }
 
   if (gaps.length === 0) return 1;

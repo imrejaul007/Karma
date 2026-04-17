@@ -8,6 +8,7 @@
 import { CronJob } from 'cron';
 import { applyDecayToAll } from '../services/karmaService.js';
 import { logger } from '../utils/logger.js';
+import { redis } from '../config/redis.js';
 
 // G-KS-B5 FIX: Decay runs DAILY (midnight UTC), not weekly.
 // The weekly batchCronSchedule is used for batch conversion, not decay.
@@ -25,8 +26,26 @@ export function startDecayWorker(): void {
     return;
   }
 
+  // CRON-001 FIX: Distributed lock — prevents N× execution in multi-instance deploy
   job = new CronJob(DAILY_DECAY_SCHEDULE, async () => {
-    await runDecayJob();
+    const LOCK_KEY = 'rez-karma:decay-lock';
+    const LOCK_TTL = 1800; // 30 minutes — must exceed worst-case decay run time
+    let lockAcquired: string | null = null;
+    try {
+      lockAcquired = await redis.set(LOCK_KEY, '1', 'EX', LOCK_TTL, 'NX');
+    } catch (err) {
+      logger.error('Decay job failed to acquire lock — Redis may be unavailable', { error: err });
+      return;
+    }
+    if (!lockAcquired) {
+      logger.info('Decay job skipped — another instance holds the lock');
+      return;
+    }
+    try {
+      await runDecayJob();
+    } finally {
+      await redis.del(LOCK_KEY).catch(() => {});
+    }
   });
 
   job.start();

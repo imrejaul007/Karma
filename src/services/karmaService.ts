@@ -324,13 +324,10 @@ export async function applyDecayToAll(): Promise<{
     const lockKey = `decay-lock:${userId}`;
     const lockToken = randomUUID();
 
-    // BE-KAR-009 FIX: Acquire distributed lock using setnx + expire (ioredis-compatible).
-    // Using set(key, value, 'NX', 'EX', 10) triggers a TypeScript overload resolution error
-    // because ioredis types don't support NX and EX as positional args in the same call.
-    const lockAcquired = await redis.setnx(lockKey, lockToken);
-    if (lockAcquired) {
-      await redis.expire(lockKey, 10);
-    }
+    // BE-KAR-009 FIX: Acquire distributed lock atomically using SET NX EX.
+    // Previously used setnx + expire in two calls, which is NOT atomic — if the process
+    // crashes between setnx and expire, the lock is held forever with no TTL.
+    const lockAcquired = await redis.set(lockKey, lockToken, 'EX', 10, 'NX');
     if (!lockAcquired) {
       // Another process is decaying this user, skip
       logger.debug(`Decay lock contention on user ${userId}, skipping`);
@@ -355,32 +352,45 @@ export async function applyDecayToAll(): Promise<{
 
       decayedCount += 1;
       const newActiveKarma = Math.max(0, profile.activeKarma + delta.activeKarmaChange);
-      profile.activeKarma = newActiveKarma;
 
-      // BE-KAR-001 FIX: Persist lastDecayAppliedAt so decay is not reapplied today
-      if (delta.lastDecayAppliedAt) {
-        (profile as any).lastDecayAppliedAt = delta.lastDecayAppliedAt;
-      }
+      // Build atomic update to prevent race condition with concurrent addKarma calls.
+      // Previously used read-modify-write (profile.save()), which could overwrite
+      // karma additions that occurred between findById and save.
+      const updateOps: Record<string, any> = {
+        $set: {
+          activeKarma: newActiveKarma,
+          lastDecayAppliedAt: delta.lastDecayAppliedAt ?? new Date(),
+        },
+      };
 
       if (delta.levelChange && delta.newLevel) {
         levelDrops += 1;
+        updateOps.$set.level = delta.newLevel;
+
+        // Close previous level entry and push new one atomically
         const lastEntry = profile.levelHistory[profile.levelHistory.length - 1];
         if (lastEntry && !lastEntry.droppedAt) {
-          lastEntry.droppedAt = new Date();
+          // Update the last level history entry's droppedAt in-place
+          await KarmaProfile.updateOne(
+            { _id: raw._id, 'levelHistory.droppedAt': { $exists: false } },
+            { $set: { 'levelHistory.$[elem].droppedAt': new Date() } },
+            { arrayFilters: [{ 'elem.droppedAt': { $exists: false } }] },
+          );
         }
-        profile.level = delta.newLevel;
+
         const entry: ILevelHistoryEntry = {
           level: delta.newLevel,
           earnedAt: new Date(),
           reason: 'decay', // BE-KAR-007 FIX: Record decay as reason
         };
-        profile.levelHistory.push(entry);
+        updateOps.$push = { levelHistory: entry };
+
         logger.info(
           `User ${profile.userId.toString()} level dropped from ${delta.oldLevel} to ${delta.newLevel} due to decay`,
         );
       }
 
-      await profile.save();
+      await KarmaProfile.updateOne({ _id: raw._id }, updateOps);
     } finally {
       // BE-KAR-009 FIX: Always release the lock
       const lockStillHeld = await redis.get(lockKey);

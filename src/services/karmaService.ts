@@ -36,6 +36,7 @@ import {
   nextLevelThreshold,
 } from '../engines/karmaEngine.js';
 import { logger } from '../utils/logger.js';
+import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
 
 export { calculateLevel, getConversionRate };
 
@@ -269,6 +270,23 @@ export async function addKarma(
     );
     await updatedProfile.save();
   }
+
+  // Karma → Gamification bridge: emit event so gamification service can
+  // check for karma-based achievements (e.g., "earn 1000 karma" badges).
+  // Fire-and-forget — gamification failures must not block karma flow.
+  emitKarmaAwardedEvent({
+    userId,
+    karmaAmount: karma,
+    eventType: 'karma.awarded',
+    eventId: `karma-${userId}-${Date.now()}`,
+    newActiveKarma: updatedProfile.activeKarma,
+    newLevel,
+  }).catch((err) => {
+    logger.warn('[Karma] Failed to emit karma.awarded to gamification', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 /**

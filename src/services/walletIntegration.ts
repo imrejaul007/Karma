@@ -118,34 +118,31 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
  * Get a user's karma_points balance from the Wallet Service.
  *
  * @param userId - User ID to query
- * @returns Balance as a number, or 0 on error
+ * @returns Balance as a number
+ * @throws Error if INTERNAL_SERVICE_TOKEN is missing or wallet service call fails
  *
- * G-KS-C9 FIX: Uses /internal/balance endpoint and includes X-Internal-Token header.
+ * CS-CRIT-05 + CS-HIGH-03 FIX: Throws on error so callers can distinguish
+ * "user has 0 karma" from "wallet service unavailable". Also sends userId in
+ * params so the wallet service returns the correct user's balance.
  */
 export async function getKarmaBalance(userId: string): Promise<number> {
   if (!process.env.INTERNAL_SERVICE_TOKEN) {
-    log.warn('getKarmaBalance: INTERNAL_SERVICE_TOKEN not configured');
-    return 0;
+    throw new Error('INTERNAL_SERVICE_TOKEN not configured');
   }
 
-  try {
-    const client = getWalletClient();
-    // G-KS-C9 FIX: Use internal endpoint /internal/balance, not /api/wallet/balance.
-    const response = await client.get<{ balance?: { available?: number }; coins?: Array<{ type: string; amount: number }> }>(
-      '/internal/balance',
-      { params: { coinType: 'karma_points' } },
-    );
+  const client = getWalletClient();
+  // CS-HIGH-03 FIX: Include userId so wallet returns the correct user's balance.
+  const response = await client.get<{ balance?: { available?: number }; coins?: Array<{ type: string; amount: number }> }>(
+    '/internal/balance',
+    { params: { coinType: 'karma_points', userId } },
+  );
 
-    // Try karma_points sub-entry first
-    const karmaEntry = response.data.coins?.find((c) => c.type === 'karma_points');
-    if (karmaEntry) {
-      return karmaEntry.amount;
-    }
-
-    // Fall back to top-level balance
-    return response.data.balance?.available ?? 0;
-  } catch (err) {
-    log.warn('Failed to get karma balance', { userId, error: (err as Error).message });
-    return 0;
+  // Try karma_points sub-entry first
+  const karmaEntry = response.data.coins?.find((c) => c.type === 'karma_points');
+  if (karmaEntry) {
+    return karmaEntry.amount;
   }
+
+  // Fall back to top-level balance
+  return response.data.balance?.available ?? 0;
 }

@@ -141,3 +141,52 @@ bullmqRedis.on('end', () => {
   }
   logger.error('[Redis:bullmq] Connection closed');
 });
+
+// ── Subscriber client for cross-service pub/sub ──────────────────────────────────
+// XS-CRIT-007 FIX: Dedicated subscriber client (MUST be separate from the main
+// redis client — a client cannot both publish and subscribe on the same connection
+// in Redis pub/sub mode). This client listens for coin credit events published by
+// the wallet service so the karma service can update karma records accordingly.
+export const subscriber: IORedis = sentinels
+  ? new IORedis({
+      sentinels,
+      name: `${sentinelName}:subscriber`,
+      password: redisPassword,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      lazyConnect: true,
+      retryStrategy: (times: number) => {
+        const base = Math.min(Math.pow(2, times) * 200, 15000);
+        return Math.floor(base + Math.random() * 500);
+      },
+      reconnectOnError,
+    })
+  : new IORedis(redisUrl, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      lazyConnect: true,
+      password: redisPassword,
+      tls: redisUrl.startsWith('rediss://') ? {} : undefined,
+      retryStrategy: (times: number) => {
+        const base = Math.min(Math.pow(2, times) * 200, 15000);
+        return Math.floor(base + Math.random() * 500);
+      },
+      reconnectOnError,
+    });
+
+subscriber.on('connect', () => logger.info('[Redis:subscriber] Connected'));
+subscriber.on('ready', () => logger.info('[Redis:subscriber] Ready'));
+subscriber.on('error', (err: Error) => {
+  if (redisShutdownInitiated) {
+    logger.info('[Redis:subscriber] Connection closing during shutdown');
+    return;
+  }
+  logger.error('[Redis:subscriber] Error: ' + err.message);
+});
+subscriber.on('end', () => {
+  if (redisShutdownInitiated) {
+    logger.info('[Redis:subscriber] Connection closed (shutdown)');
+    return;
+  }
+  logger.error('[Redis:subscriber] Connection permanently closed');
+});

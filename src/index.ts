@@ -17,6 +17,7 @@ import routes from './routes';
 import karmaRoutes from './routes/karmaRoutes';
 import verifyRoutes from './routes/verifyRoutes';
 import batchRoutes from './routes/batchRoutes';
+import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
 
 const app = express();
 
@@ -137,23 +138,13 @@ async function start() {
 
   await connectMongoDB();
 
-  // G-KS-L3 FIX: Start all cron workers after DB is connected.
-  const { startDecayWorker } = await import('./workers/decayWorker.js');
-  const { startBatchScheduler } = await import('./workers/batchScheduler.js');
-  const { startAutoCheckoutWorker } = await import('./workers/autoCheckoutWorker.js');
-  startDecayWorker();
-  startBatchScheduler();
-  startAutoCheckoutWorker();
+  // XS-CRIT-007 FIX: Start the coin event subscriber so the karma service can
+  // react to coin credit events from the wallet service and other services.
+  await startCoinEventSubscriber();
 
   const server = app.listen(port, '0.0.0.0', () => {
     logger.info(`[rez-karma-service] HTTP API listening on port ${port}`);
   });
-
-  // G-KS-L3 FIX: Stop all workers on graceful shutdown.
-  // Import workers lazily to avoid circular dependencies.
-  const { stopDecayWorker } = await import('./workers/decayWorker.js');
-  const { stopBatchScheduler } = await import('./workers/batchScheduler.js');
-  const { stopAutoCheckoutWorker } = await import('./workers/autoCheckoutWorker.js');
 
   const shutdown = async (signal: string) => {
     if (isShuttingDown) return;
@@ -164,18 +155,16 @@ async function start() {
       logger.info('[SHUTDOWN] HTTP server closed');
     });
 
-    // G-KS-L3 FIX: Stop all cron workers before closing database connections.
-    stopDecayWorker();
-    stopBatchScheduler();
-    stopAutoCheckoutWorker();
-    logger.info('[SHUTDOWN] All workers stopped');
-
     try {
       await mongoose.disconnect();
       logger.info('[SHUTDOWN] MongoDB disconnected');
 
       const { bullmqRedis, markRedisShutdownInitiated } = await import('./config/redis');
       markRedisShutdownInitiated();
+
+      // XS-CRIT-007 FIX: Stop coin event subscriber before closing Redis connections
+      await stopCoinEventSubscriber().catch(() => {});
+
       await redis.quit().catch(() => {});
       await bullmqRedis.quit().catch(() => {});
       logger.info('[SHUTDOWN] Redis connections closed');

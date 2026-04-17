@@ -4,6 +4,7 @@
  * Manages EarnRecord lifecycle: creation after verification,
  * retrieval, pagination, status updates, and batch queries.
  */
+import moment from 'moment';
 import { EarnRecord, EarnRecordDocument } from '../models/EarnRecord.js';
 import { KarmaProfile, KarmaProfileDocument } from '../models/KarmaProfile.js';
 import { logger } from '../config/logger.js';
@@ -306,8 +307,8 @@ async function updateProfileStats(
 
     // Reset weekly tracking if needed
     const now = new Date();
-    const weekStart = getWeekStart(now);
-    if (!profile.weekOfLastKarmaEarned || getWeekStart(profile.weekOfLastKarmaEarned) < weekStart) {
+    const weekStart = moment(now).startOf('isoWeek').toDate();
+    if (!profile.weekOfLastKarmaEarned || moment(profile.weekOfLastKarmaEarned).startOf('isoWeek').toDate() < weekStart) {
       profile.thisWeekKarmaEarned = 0;
     }
     profile.thisWeekKarmaEarned += karmaEarned;
@@ -319,18 +320,6 @@ async function updateProfileStats(
   } catch (err) {
     logger.error('[EarnRecordService] Failed to update profile stats', { userId, error: err });
   }
-}
-
-/**
- * Returns the ISO week-start date (Monday 00:00:00) for a given date.
- */
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
 }
 
 // ---------------------------------------------------------------------------

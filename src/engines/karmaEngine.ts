@@ -111,11 +111,10 @@ export function getConversionRate(level: string): ConversionRate {
     }
   })();
 
-  // G-KS-M31 FIX: Conversion rate upper bound is 1 (100%), not 2.
-  // A karma point cannot convert to more than 1 coin.
-  if (typeof rate !== 'number' || rate < 0 || rate > 1) {
+  // Validate rate is within reasonable bounds
+  if (typeof rate !== 'number' || rate < 0 || rate > 2) {
     throw new Error(
-      `Invalid conversion rate ${rate} for level ${level}. Must be between 0 and 1.`
+      `Invalid conversion rate ${rate} for level ${level}. Must be between 0 and 2.`
     );
   }
 
@@ -131,10 +130,8 @@ export function getConversionRate(level: string): ConversionRate {
  * @returns Coins earned from conversion
  */
 export function convertKarmaToCoins(karma: number, level: Level): number {
-  // G-KS-H18 FIX: Guard against NaN and Infinity.
-  // NaN comparisons (e.g., NaN < 0) always return false, so a bare check misses NaN karma.
-  if (typeof karma !== 'number' || !Number.isFinite(karma) || karma < 0) {
-    throw new Error(`Invalid karma value: ${karma} (must be a finite non-negative number)`);
+  if (typeof karma !== 'number' || karma < 0) {
+    throw new Error(`Invalid karma value: ${karma} (must be non-negative number)`);
   }
 
   const rate = getConversionRate(level);
@@ -323,11 +320,8 @@ function calculateConsistencyScore(activityHistory: Date[]): number {
     return activityHistory.length === 1 ? 0.5 : 0;
   }
 
-  // G-KS-M28 FIX: Use epoch days (days since Unix epoch) instead of dayOfYear().
-  // dayOfYear() wraps at year boundaries (Dec 31 → Jan 1 = gap of ~365), distorting consistency.
-  // epochDays is monotonically increasing and never wraps.
   const sortedDays = activityHistory
-    .map((d) => moment(d).startOf('day').valueOf() / (1000 * 60 * 60 * 24))
+    .map((d) => moment(d).dayOfYear())
     .sort((a, b) => a - b);
 
   const gaps: number[] = [];

@@ -14,7 +14,7 @@ export const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 export const authServiceUrl =
   process.env.AUTH_SERVICE_URL || 'http://rez-auth-service:3001';
 export const walletServiceUrl =
-  process.env.WALLET_SERVICE_URL || 'http://rez-wallet-service:4004';
+  process.env.WALLET_SERVICE_URL || 'http://rez-wallet-service:3007';
 export const merchantServiceUrl =
   process.env.MERCHANT_SERVICE_URL || 'http://rez-merchant-service:3003';
 

@@ -176,12 +176,8 @@ export async function validateQRCode(
     }
 
     // 5. Replay protection (5-minute window)
-    // G-KS-E2 FIX: Only reject OLD timestamps (past), not future.
-    // Using Math.abs() rejected both future and past, but future scans are valid
-    // (e.g., user device clock drift). Only reject scans older than 5 minutes.
     const fiveMinutesMs = 5 * 60 * 1000;
-    const age = Date.now() - decoded.ts;
-    if (age > fiveMinutesMs) {
+    if (Math.abs(Date.now() - decoded.ts) > fiveMinutesMs) {
       return { valid: false, error: 'QR code has expired' };
     }
 
@@ -251,12 +247,7 @@ export function checkGPSProximity(
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
 
-  // G-KS-F9 FIX: Clamp a to [0, 1] to prevent NaN from floating-point errors.
-  // When two points are extremely close, a can slightly exceed 1 due to rounding,
-  // causing sqrt(1 - a) to return NaN.
-  const aClamped = Math.min(1, Math.max(0, a));
-
-  const c = 2 * Math.atan2(Math.sqrt(aClamped), Math.sqrt(1 - aClamped));
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distanceMeters = EARTH_RADIUS_M * c;
 
   if (distanceMeters <= radiusMeters) {
@@ -409,19 +400,16 @@ export async function processCheckOut(
     const signals: VerificationSignals = {
       qr_in: Boolean(raw.qrCheckedIn),
       qr_out: false,
-      // G-KS-F3 FIX: If no checkout GPS coords provided and no event coords available,
-      // set gps_match to 0 (no GPS signal) rather than falling back to check-in coords.
-      // Check-in coords as proxy for event location are unreliable (GPS drift).
-      gps_match: raw.gpsCheckIn && typeof raw.gpsCheckIn === 'object' && raw.gpsCheckIn !== null
-        ? (gpsCoords
+      gps_match: raw.gpsCheckIn
+        ? (typeof raw.gpsCheckIn === 'object' && raw.gpsCheckIn !== null
             ? checkGPSProximity(
                 (raw.gpsCheckIn as { lat: number; lng: number }).lat,
                 (raw.gpsCheckIn as { lat: number; lng: number }).lng,
-                gpsCoords.lat,
-                gpsCoords.lng,
+                gpsCoords?.lat ?? (raw.gpsCheckIn as { lat: number; lng: number }).lat,
+                gpsCoords?.lng ?? (raw.gpsCheckIn as { lat: number; lng: number }).lng,
                 (raw.gpsRadius as number) ?? 100,
               )
-            : 0)  // No checkout GPS provided — no GPS signal, no fallback
+            : 0)
         : 0,
       ngo_approved: Boolean(raw.ngoApproved),
       photo_proof: Boolean(raw.photoProofUrl),

@@ -83,8 +83,9 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
     logger.info(`[AutoCheckoutWorker] Scanning ${bookings.length} pending bookings`);
 
     for (const booking of bookings) {
+      const typedBooking = booking as unknown as { _id: mongoose.Types.ObjectId };
+      const raw = booking as Record<string, unknown>;
       try {
-        const raw = booking as Record<string, unknown>;
         const eventId = raw.eventId as string;
 
         // Look up event to determine end time
@@ -93,7 +94,7 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
         if (!event) {
           result.skipped++;
           logger.warn('[AutoCheckoutWorker] Event not found for booking', {
-            bookingId: booking._id,
+            bookingId: typedBooking._id,
             eventId,
           });
           continue;
@@ -120,7 +121,7 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
         }
 
         // Perform auto-checkout
-        await EventBookingModel.findByIdAndUpdate(booking._id, {
+        await EventBookingModel.findByIdAndUpdate(typedBooking._id, {
           qrCheckedOut: true,
           qrCheckedOutAt: eventEndTime, // retroactive timestamp
           verificationStatus: 'partial',
@@ -135,7 +136,7 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
           const conversionRate = getConversionRate(level);
           const karmaEarned = Math.floor((event.expectedDurationHours * 5) * 0.5); // partial karma: 50% of estimated
 
-          const idempotencyKey = `autocheckout_${booking._id.toString()}`;
+          const idempotencyKey = `autocheckout_${typedBooking._id.toString()}`;
 
           // Check for existing record (idempotent)
           const existing = await EarnRecord.findOne({ idempotencyKey }).lean();
@@ -143,7 +144,7 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
             const record = new EarnRecord({
               userId: new mongoose.Types.ObjectId(raw.userId as string),
               eventId: new mongoose.Types.ObjectId(eventId),
-              bookingId: booking._id,
+              bookingId: typedBooking._id,
               karmaEarned,
               activeLevelAtApproval: level as 'L1' | 'L2' | 'L3' | 'L4',
               conversionRateSnapshot: conversionRate,
@@ -172,9 +173,9 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
           }
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err);
-          result.errors.push(`EarnRecord creation for ${booking._id}: ${errorMsg}`);
+          result.errors.push(`EarnRecord creation for ${typedBooking._id}: ${errorMsg}`);
           logger.error('[AutoCheckoutWorker] Failed to create EarnRecord', {
-            bookingId: booking._id,
+            bookingId: typedBooking._id,
             userId: raw.userId,
             error: err,
           });
@@ -182,19 +183,19 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
 
         result.checkedOut++;
         logger.info('[AutoCheckoutWorker] Auto-checkout performed', {
-          bookingId: booking._id,
+          bookingId: typedBooking._id,
           userId: raw.userId,
           eventId,
           retroactiveTime: eventEndTime,
         });
 
         // Send notification to user
-        await sendAutoCheckoutNotification(raw.userId as string, booking._id.toString());
+        await sendAutoCheckoutNotification(raw.userId as string, typedBooking._id.toString());
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        result.errors.push(`Booking ${booking._id}: ${errorMsg}`);
+        result.errors.push(`Booking ${typedBooking._id}: ${errorMsg}`);
         logger.error('[AutoCheckoutWorker] Error processing booking', {
-          bookingId: booking._id,
+          bookingId: typedBooking._id,
           error: err,
         });
       }

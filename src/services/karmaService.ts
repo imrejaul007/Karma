@@ -124,11 +124,6 @@ export async function addKarma(
     isApproved?: boolean;
   },
 ): Promise<void> {
-  // G-KS-B2 FIX: Validate karma is a finite positive number.
-  if (typeof karma !== 'number' || !Number.isFinite(karma) || karma <= 0) {
-    throw new Error(`Invalid karma value: ${karma} (must be a positive finite number)`);
-  }
-
   const WEEKLY_COIN_CAP = 300;
   // G-KS-B5 FIX: Use startOf('isoWeek') to match batchService consistency.
   // ISO week starts on Monday; locale-aware startOf('week') varies by locale.
@@ -487,8 +482,8 @@ export async function getWeeklyKarmaUsed(
   weekOf?: Date,
 ): Promise<number> {
   const profile = await getOrCreateProfile(userId);
-  // NA-MED-13 FIX: Use startOf('isoWeek') consistently to match addKarma() and batchService.
-  // ISO week starts on Monday; locale-aware startOf('week') varies by locale.
+  // XS-CRIT-003 FIX: Use startOf('isoWeek') for consistent Monday-anchored weeks,
+  // matching the anchor used in addKarma(). Locale-aware startOf('week') varies.
   const targetWeek = weekOf
     ? moment(weekOf).startOf('isoWeek')
     : moment().startOf('isoWeek');
@@ -523,8 +518,7 @@ export async function getKarmaHistory(
       karmaConverted: entry.karmaConverted,
       coinsEarned: entry.coinsEarned,
       rate: entry.rate,
-      // G-KS-H19 FIX: Guard against undefined batchId before calling toString().
-      batchId: entry.batchId?.toString() ?? 'unknown',
+      batchId: entry.batchId.toString(),
       convertedAt: entry.convertedAt,
     }));
 }

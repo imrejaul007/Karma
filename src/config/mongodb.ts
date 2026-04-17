@@ -4,7 +4,7 @@ import { logger } from './logger';
 export async function connectMongoDB(uri?: string): Promise<void> {
   const connectionUri = uri || process.env.MONGODB_URI;
   if (!connectionUri) {
-    console.error('[FATAL] MONGODB_URI environment variable is not set');
+    logger.error('[FATAL] MONGODB_URI environment variable is not set');
     process.exit(1);
   }
 

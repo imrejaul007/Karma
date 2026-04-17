@@ -13,8 +13,10 @@ declare global {
 }
 
 export interface AuthPayload {
-  userId: string;
-  role: string;
+  valid: boolean;
+  userId?: string;
+  role?: string;
+  merchantId?: string;
   permissions?: string[];
 }
 
@@ -38,25 +40,25 @@ export async function requireAuth(
   const token = authHeader.slice(7);
 
   try {
-    const response = await axios.post<AuthPayload>(
-      `${authServiceUrl}/api/auth/verify`,
-      { token },
-      { timeout: 5000 },
+    const response = await axios.get<AuthPayload>(
+      `${authServiceUrl}/api/user/auth/validate`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 5000,
+      },
     );
 
     // G-KS-C2 FIX: Validate response shape before trusting.
-    // Reject if userId is missing, not a string, or empty.
+    // Reject if valid is false, userId is missing/not a string/empty, or role is missing.
     const payload = response.data;
     if (
       !payload ||
+      payload.valid !== true ||
       typeof payload.userId !== 'string' ||
       payload.userId.length === 0 ||
       typeof payload.role !== 'string'
     ) {
-      res.status(503).json({
-        success: false,
-        message: 'Authentication service returned malformed response',
-      });
+      res.status(401).json({ success: false, message: 'Invalid token' });
       return;
     }
 

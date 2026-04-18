@@ -36,6 +36,7 @@ import {
   nextLevelThreshold,
 } from '../engines/karmaEngine.js';
 import { logger } from '../utils/logger.js';
+import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
 
 export { calculateLevel, getConversionRate };
 
@@ -72,31 +73,34 @@ export async function getOrCreateProfile(
     throw new Error(`Invalid userId: ${userId}`);
   }
 
-  let profile = await KarmaProfile.findOne({ userId });
-  if (!profile) {
-    profile = await KarmaProfile.create({
-      userId: new mongoose.Types.ObjectId(userId),
-      lifetimeKarma: 0,
-      activeKarma: 0,
-      level: 'L1',
-      eventsCompleted: 0,
-      eventsJoined: 0,
-      totalHours: 0,
-      trustScore: 0,
-      badges: [],
-      lastActivityAt: null,
-      levelHistory: [],
-      conversionHistory: [],
-      thisWeekKarmaEarned: 0,
-      avgEventDifficulty: 0,
-      avgConfidenceScore: 0,
-      checkIns: 0,
-      approvedCheckIns: 0,
-      activityHistory: [],
-    });
-    logger.info(`Created karma profile for user ${userId}`);
-  }
-  return profile;
+  // FIX 5: Use findOneAndUpdate with upsert to atomically get-or-create.
+  const profile = await KarmaProfile.findOneAndUpdate(
+    { userId: new mongoose.Types.ObjectId(userId) },
+    {
+      $setOnInsert: {
+        userId: new mongoose.Types.ObjectId(userId),
+        lifetimeKarma: 0,
+        activeKarma: 0,
+        level: 'L1',
+        eventsCompleted: 0,
+        eventsJoined: 0,
+        totalHours: 0,
+        trustScore: 0,
+        badges: [],
+        lastActivityAt: null,
+        levelHistory: [],
+        conversionHistory: [],
+        thisWeekKarmaEarned: 0,
+        avgEventDifficulty: 0,
+        avgConfidenceScore: 0,
+        checkIns: 0,
+        approvedCheckIns: 0,
+        activityHistory: [],
+      },
+    },
+    { upsert: true, new: true },
+  );
+  return profile!;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,64 +214,79 @@ export async function addKarma(
   // karma fields in the same findOneAndUpdate call.
   const hoursIncrement = options?.hours ?? 0;
 
-  const profile = await KarmaProfile.findOneAndUpdate(
+  // CRITICAL-005 FIX: Replace non-atomic read-modify-write with fully atomic findOneAndUpdate.
+  // Use atomic $inc for numeric fields to prevent race condition on concurrent calls.
+  const incFields: Record<string, number> = {
+    lifetimeKarma: karma,
+    activeKarma: karma,
+  };
+  if (options?.hours) {
+    incFields.totalHours = options.hours;
+  }
+  if (options?.isCheckIn) {
+    incFields.checkIns = 1;
+    if (options?.isApproved) {
+      incFields.approvedCheckIns = 1;
+    }
+  }
+
+  const updatedProfile = await KarmaProfile.findOneAndUpdate(
     { userId },
     {
-      $inc: {
-        lifetimeKarma: karma,
-        activeKarma: karma,
-        totalHours: hoursIncrement,
-        // CRITICAL-005: eventsCompleted/Joined moved here from recordKarmaEarned()
-        // to keep all karma balance mutations in a single atomic update.
-        eventsCompleted: 1,
-        eventsJoined: 1,
-        ...(options?.isCheckIn
-          ? { checkIns: 1, ...(options?.isApproved ? { approvedCheckIns: 1 } : {}) }
-          : {}),
-      },
-      $set: {
-        lastActivityAt: new Date(),
+      $inc: incFields,
+      $set: { lastActivityAt: new Date() },
+      $push: {
+        activityHistory: {
+          $each: [new Date()],
+          $slice: -90,
+        },
       },
     },
     { new: true },
   );
 
-  if (!profile) {
-    logger.error('[Karma] addKarma: profile not found after weekly-cap update', { userId });
+  if (!updatedProfile) {
+    logger.error('[Karma] addKarma: profile not found after atomic update', { userId });
     throw new Error('Profile not found');
   }
 
-  const oldLevel = profile.level;
-  const newLevel = calculateLevel(profile.activeKarma);
-
-  // Handle level change atomically in a second update.
-  // CRITICAL-005: Level history array updates must be atomic to prevent duplicate
-  // entries or corrupted history from concurrent level-ups.
+  // Recalculate level after atomic update using the returned document
+  const oldLevel = updatedProfile.level;
+  const oldActiveKarma = updatedProfile.activeKarma;
+  const newLevel = calculateLevel(updatedProfile.activeKarma);
   if (newLevel !== oldLevel) {
-    // Close the previous level entry's droppedAt atomically
-    await KarmaProfile.updateOne(
-      { userId, 'levelHistory.droppedAt': { $exists: false } },
-      { $set: { 'levelHistory.$[elem].droppedAt': new Date() } },
-      { arrayFilters: [{ 'elem.droppedAt': { $exists: false } }] },
-    );
-
-    // Push new level entry atomically
+    const previousEntry = updatedProfile.levelHistory[updatedProfile.levelHistory.length - 1];
+    if (previousEntry && !previousEntry.droppedAt) {
+      previousEntry.droppedAt = new Date();
+    }
+    updatedProfile.level = newLevel;
     const entry: ILevelHistoryEntry = {
       level: newLevel as Level,
       earnedAt: new Date(),
     };
-    await KarmaProfile.updateOne(
-      { userId },
-      {
-        $set: { level: newLevel },
-        $push: { levelHistory: entry },
-      },
-    );
-
+    updatedProfile.levelHistory.push(entry);
     logger.info(
-      `User ${userId} leveled up from ${oldLevel} to ${newLevel} (activeKarma: ${profile.activeKarma})`,
+      `User ${userId} leveled up from ${oldLevel} to ${newLevel} (${oldActiveKarma} → ${updatedProfile.activeKarma} karma)`,
     );
+    await updatedProfile.save();
   }
+
+  // Karma → Gamification bridge: emit event so gamification service can
+  // check for karma-based achievements (e.g., "earn 1000 karma" badges).
+  // Fire-and-forget — gamification failures must not block karma flow.
+  emitKarmaAwardedEvent({
+    userId,
+    karmaAmount: karma,
+    eventType: 'karma.awarded',
+    eventId: `karma-${userId}-${Date.now()}`,
+    newActiveKarma: updatedProfile.activeKarma,
+    newLevel,
+  }).catch((err) => {
+    logger.warn('[Karma] Failed to emit karma.awarded to gamification', {
+      userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 /**

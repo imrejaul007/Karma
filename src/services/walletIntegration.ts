@@ -115,7 +115,7 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
 }
 
 /**
- * Get a user's karma_points balance from the Wallet Service.
+ * Get a user's ReZ coin balance from the Wallet Service.
  *
  * @param userId - User ID to query
  * @returns Balance as a number
@@ -124,6 +124,10 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
  * CS-CRIT-05 + CS-HIGH-03 FIX: Throws on error so callers can distinguish
  * "user has 0 karma" from "wallet service unavailable". Also sends userId in
  * params so the wallet service returns the correct user's balance.
+ *
+ * CROSS-PRODUCT-FIX-1: Changed coinType from 'karma_points' to canonical 'rez'.
+ * batchService already credits coins as 'rez'; querying with 'karma_points'
+ * would never find them, making converted karma coins appear unredeemable.
  */
 export async function getKarmaBalance(userId: string): Promise<number> {
   if (!process.env.INTERNAL_SERVICE_TOKEN) {
@@ -132,15 +136,16 @@ export async function getKarmaBalance(userId: string): Promise<number> {
 
   const client = getWalletClient();
   // CS-HIGH-03 FIX: Include userId so wallet returns the correct user's balance.
+  // CROSS-PRODUCT-FIX-1: Use canonical 'rez' coin type (not legacy 'karma_points').
   const response = await client.get<{ balance?: { available?: number }; coins?: Array<{ type: string; amount: number }> }>(
     '/internal/balance',
-    { params: { coinType: 'karma_points', userId } },
+    { params: { coinType: 'rez', userId } },
   );
 
-  // Try karma_points sub-entry first
-  const karmaEntry = response.data.coins?.find((c) => c.type === 'karma_points');
-  if (karmaEntry) {
-    return karmaEntry.amount;
+  // Try 'rez' sub-entry first (canonical coin type for karma-converted coins)
+  const rezEntry = response.data.coins?.find((c) => c.type === 'rez');
+  if (rezEntry) {
+    return rezEntry.amount;
   }
 
   // Fall back to top-level balance

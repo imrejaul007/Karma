@@ -1,3 +1,7 @@
+// Canonical source: @rez/shared-types/enums - keep in sync
+// These types are defined locally because @rez/shared-types is not an npm dependency.
+// Any changes here MUST be mirrored in packages/shared-types/src/enums/.
+
 export type Level = 'L1' | 'L2' | 'L3' | 'L4';
 
 export type ConversionRate = 0.25 | 0.5 | 0.75 | 1.0;

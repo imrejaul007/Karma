@@ -149,13 +149,13 @@ export async function addKarma(
             $lt: [
               {
                 $dateToString: {
-                  format: '%Y-%U',
+                  format: '%G-%V',
                   date: '$weekOfLastKarmaEarned',
                 }
               },
               {
                 $dateToString: {
-                  format: '%Y-%U',
+                  format: '%G-%V',
                   date: new Date(startOfWeek),
                 }
               }
@@ -168,13 +168,13 @@ export async function addKarma(
                 $eq: [
                   {
                     $dateToString: {
-                      format: '%Y-%U',
+                      format: '%G-%V',
                       date: '$weekOfLastKarmaEarned',
                     }
                   },
                   {
                     $dateToString: {
-                      format: '%Y-%U',
+                      format: '%G-%V',
                       date: new Date(startOfWeek),
                     }
                   }

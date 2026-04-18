@@ -102,7 +102,8 @@ async function enrichWithMerchantEvent(
       const merchantEv = merchantEventsMap.get(ke.merchantEventId.toString()) ?? {};
       return {
         ...toKarmaEventResponse(ke, joinedEventIds.has(ke._id.toString())),
-        _id: ke.merchantEventId.toString(),
+        _id: ke._id.toString(),
+        merchantEventId: ke.merchantEventId.toString(),
         name: merchantEv.name ?? 'Event',
         description: merchantEv.description ?? '',
         image: merchantEv.image,
@@ -162,6 +163,11 @@ router.get('/event/:eventId', requireAuth, async (req: Request, res: Response): 
     const { eventId } = req.params;
     const userId = req.userId ?? '';
 
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      res.status(400).json({ success: false, message: 'Invalid event ID format' });
+      return;
+    }
+
     const karmaEvent = await KarmaEvent.findOne({
       $or: [
         { _id: eventId },
@@ -198,7 +204,7 @@ router.get('/event/:eventId', requireAuth, async (req: Request, res: Response): 
       enriched = {
         ...enriched,
         ...response.data,
-        _id: eventId,
+        _id: karmaEvent._id.toString(),
         isJoined,
         qrCodes: karmaEvent.qrCodes,
         capacity: {
@@ -340,8 +346,17 @@ router.delete('/event/:eventId/leave', requireAuth, async (req: Request, res: Re
       return;
     }
 
+    const event = await KarmaEvent.findOne({ $or: [{ _id: eventId }, { merchantEventId: eventId }] });
+    if (!event) {
+      res.status(404).json({ success: false, message: 'Event not found' });
+      return;
+    }
+    if (event.confirmedVolunteers <= 0) {
+      res.status(400).json({ success: false, message: 'No confirmed volunteers to remove' });
+      return;
+    }
     await KarmaEvent.updateOne(
-      { $or: [{ _id: eventId }, { merchantEventId: eventId }] },
+      { _id: event._id },
       { $inc: { confirmedVolunteers: -1 } },
     );
 

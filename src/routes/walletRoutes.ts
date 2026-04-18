@@ -21,10 +21,12 @@ router.get('/wallet/balance', requireAuth, async (req: Request, res: Response): 
     const userId = req.userId ?? '';
     const { coinType = 'all' } = req.query;
 
-    if (!process.env.INTERNAL_SERVICE_TOKEN) {
+    if (!process.env.INTERNAL_SERVICE_KEY && !process.env.INTERNAL_SERVICE_TOKEN) {
       res.status(503).json({ success: false, message: 'Wallet service not configured' });
       return;
     }
+
+    const internalKey = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
 
     let karmaPoints = 0;
     let rezCoins = 0;
@@ -45,7 +47,7 @@ router.get('/wallet/balance', requireAuth, async (req: Request, res: Response): 
           `${walletServiceUrl}/internal/balance`,
           {
             params: { userId, coinType: 'rez_coins' },
-            headers: { 'X-Internal-Token': process.env.INTERNAL_SERVICE_TOKEN },
+            headers: { 'X-Internal-Token': internalKey },
             timeout: 3000,
           },
         );
@@ -88,10 +90,12 @@ router.get('/wallet/transactions', requireAuth, async (req: Request, res: Respon
     const limit = 20;
     const skip = (pageNum - 1) * limit;
 
-    if (!process.env.INTERNAL_SERVICE_TOKEN) {
+    if (!process.env.INTERNAL_SERVICE_KEY && !process.env.INTERNAL_SERVICE_TOKEN) {
       res.status(503).json({ success: false, message: 'Wallet service not configured' });
       return;
     }
+
+    const internalKey = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
 
     try {
       const { default: axios } = await import('axios');
@@ -111,7 +115,7 @@ router.get('/wallet/transactions', requireAuth, async (req: Request, res: Respon
         `${walletServiceUrl}/internal/transactions`,
         {
           params: { userId, coinType, limit, skip },
-          headers: { 'X-Internal-Token': process.env.INTERNAL_SERVICE_TOKEN },
+          headers: { 'X-Internal-Token': internalKey },
           timeout: 5000,
         },
       );

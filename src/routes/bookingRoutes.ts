@@ -78,9 +78,11 @@ router.get('/my-events', requireAuth, async (req: Request, res: Response): Promi
 
     const eventIds = bookings.map((b) => b.eventId.toString());
 
+    const validEventIds = eventIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+
     const karmaEvents = await KarmaEvent.find({
       $or: [
-        { _id: { $in: eventIds } },
+        { _id: { $in: validEventIds } },
         { merchantEventId: { $in: eventIds } },
       ],
     }).lean() as unknown as PlainKarmaEvent[];

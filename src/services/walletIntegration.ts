@@ -37,7 +37,7 @@ function getWalletClient(): AxiosInstance {
       headers: {
         'Content-Type': 'application/json',
         // G-KS-C9 FIX: All internal service calls must include the internal service token.
-        'X-Internal-Token': process.env.INTERNAL_SERVICE_TOKEN ?? '',
+        'X-Internal-Token': process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN ?? '',
       },
     });
   }
@@ -61,8 +61,8 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
   }
 
   // G-KS-C9 FIX: Validate internal token is configured before making the call.
-  if (!process.env.INTERNAL_SERVICE_TOKEN) {
-    log.error('creditUserWallet: INTERNAL_SERVICE_TOKEN not configured');
+  if (!process.env.INTERNAL_SERVICE_KEY && !process.env.INTERNAL_SERVICE_TOKEN) {
+    log.error('creditUserWallet: INTERNAL_SERVICE_KEY/TOKEN not configured');
     return { success: false, error: 'Internal service token not configured' };
   }
 
@@ -130,8 +130,8 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
  * would never find them, making converted karma coins appear unredeemable.
  */
 export async function getKarmaBalance(userId: string): Promise<number> {
-  if (!process.env.INTERNAL_SERVICE_TOKEN) {
-    throw new Error('INTERNAL_SERVICE_TOKEN not configured');
+  if (!process.env.INTERNAL_SERVICE_KEY && !process.env.INTERNAL_SERVICE_TOKEN) {
+    throw new Error('INTERNAL_SERVICE_KEY/TOKEN not configured');
   }
 
   const client = getWalletClient();

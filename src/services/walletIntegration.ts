@@ -37,7 +37,7 @@ function getWalletClient(): AxiosInstance {
       headers: {
         'Content-Type': 'application/json',
         // G-KS-C9 FIX: All internal service calls must include the internal service token.
-        'X-Internal-Token': process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN ?? '',
+        'X-Internal-Token': (process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN) ?? '',
       },
     });
   }

@@ -44,7 +44,11 @@ export function startDecayWorker(): void {
     try {
       await runDecayJob();
     } finally {
-      await redis.del(LOCK_KEY).catch(() => {});
+      try {
+        await redis.del(LOCK_KEY);
+      } catch (delErr) {
+        logger.error('[DecayWorker] Failed to release lock', { LOCK_KEY, error: delErr });
+      }
     }
   });
 

@@ -226,7 +226,11 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
     logger.error('[AutoCheckoutWorker] Scan failed', { error: err });
     return result;
   } finally {
-    await redis.del(LOCK_KEY).catch(() => {});
+    try {
+      await redis.del(LOCK_KEY);
+    } catch (delErr) {
+      logger.error('[AutoCheckoutWorker] Failed to release lock', { LOCK_KEY, error: delErr });
+    }
   }
 }
 

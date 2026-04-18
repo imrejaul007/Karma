@@ -93,7 +93,11 @@ export function startBatchScheduler(): void {
     try {
       await runWeeklyBatchCreation();
     } finally {
-      await redis.del(LOCK_KEY).catch(() => {});
+      try {
+        await redis.del(LOCK_KEY);
+      } catch (delErr) {
+        logger.error('[BatchScheduler] Failed to release lock', { LOCK_KEY, error: delErr });
+      }
     }
   });
 

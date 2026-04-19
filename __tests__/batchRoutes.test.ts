@@ -34,7 +34,7 @@ const mockCreateServiceLogger = jest.fn(() => ({
 const mockRequireAdminAuth = jest.fn((_req, _res, next) => next());
 const mockRequireAuth = jest.fn((_req, _res, next) => next());
 
-jest.mock('../src/models/Batch', () => ({
+jest.mock('../models/Batch', () => ({
   Batch: {
     find: mockBatchFind,
     findById: mockBatchFindById,
@@ -43,45 +43,45 @@ jest.mock('../src/models/Batch', () => ({
   },
 }));
 
-jest.mock('../src/models/CSRPool', () => ({
+jest.mock('../models/CSRPool', () => ({
   CSRPool: {
     findById: mockCSRPoolFindById,
   },
 }));
 
-jest.mock('../src/models/EarnRecord', () => ({
+jest.mock('../models/EarnRecord', () => ({
   EarnRecord: {
     aggregate: mockEarnRecordAggregate,
   },
 }));
 
-jest.mock('../src/services/batchService', () => ({
+jest.mock('../services/batchService', () => ({
   getBatchPreview: mockGetBatchPreview,
   executeBatch: mockExecuteBatch,
   pauseAllPendingBatches: mockPauseAllPendingBatches,
   createWeeklyBatch: mockCreateWeeklyBatch,
 }));
 
-jest.mock('../src/services/auditService', () => ({
+jest.mock('../services/auditService', () => ({
   logAudit: mockLogAudit,
   getAuditLogs: mockGetAuditLogs,
 }));
 
-jest.mock('../src/config/logger', () => ({
+jest.mock('../config/logger', () => ({
   createServiceLogger: mockCreateServiceLogger,
 }));
 
-jest.mock('../src/middleware/adminAuth', () => ({
+jest.mock('../middleware/adminAuth', () => ({
   requireAdminAuth: mockRequireAdminAuth,
 }));
 
-jest.mock('../src/middleware/auth', () => ({
+jest.mock('../middleware/auth', () => ({
   requireAuth: mockRequireAuth,
 }));
 
 // Create Express app after mocks
 import express from 'express';
-import batchRoutes from '../src/routes/batchRoutes';
+import batchRoutes from '../routes/batchRoutes';
 
 const app = express();
 app.use(express.json());

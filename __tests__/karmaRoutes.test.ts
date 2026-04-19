@@ -7,6 +7,9 @@
  * - Unauthenticated request returns 401
  * - Admin decay endpoint returns 403 for non-admin
  */
+// Set required env vars before any module imports
+process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-chars-long!';
+
 import request from 'supertest';
 import express, { Express } from 'express';
 import mongoose from 'mongoose';

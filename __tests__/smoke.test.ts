@@ -17,7 +17,7 @@ describe('Smoke Tests — Health Endpoints', () => {
   test('GET /health returns 200 with status ok', async () => {
     const res = await fetch(`${BASE_URL}/health`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as { status: string; service: string; timestamp: unknown };
     expect(body.status).toMatch(/^(ok|degraded)$/);
     expect(body.service).toBe('rez-karma-service');
     expect(body.timestamp).toBeDefined();
@@ -26,7 +26,7 @@ describe('Smoke Tests — Health Endpoints', () => {
   test('GET /health/live returns 200', async () => {
     const res = await fetch(`${BASE_URL}/health/live`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as { status: string };
     expect(body.status).toBe('alive');
   });
 
@@ -38,7 +38,7 @@ describe('Smoke Tests — Health Endpoints', () => {
   test('GET /metrics returns JSON with uptime and memory', async () => {
     const res = await fetch(`${BASE_URL}/metrics`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await res.json() as { uptime: number; memory: { heapUsed: unknown } };
     expect(typeof body.uptime).toBe('number');
     expect(body.memory).toBeDefined();
     expect(body.memory.heapUsed).toBeDefined();
@@ -88,7 +88,7 @@ describe('Smoke Tests — 404 Handling', () => {
   test('Unknown route returns 404', async () => {
     const res = await fetch(`${BASE_URL}/api/karma/nonexistent`);
     expect(res.status).toBe(404);
-    const body = await res.json();
+    const body = await res.json() as { success: boolean };
     expect(body.success).toBe(false);
   });
 });

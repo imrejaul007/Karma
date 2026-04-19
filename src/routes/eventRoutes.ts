@@ -8,6 +8,7 @@
  */
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { randomUUID } from 'crypto';
 import { requireAuth } from '../middleware/auth.js';
 import { KarmaEvent } from '../models/index.js';
 import { EventBookingModel } from '../engines/verificationEngine.js';
@@ -279,7 +280,12 @@ router.post('/event/join', requireAuth, async (req: Request, res: Response): Pro
       userId: new mongoose.Types.ObjectId(userId),
       eventId,
       status: 'confirmed',
-      bookingReference: `BK-${Date.now()}-${userId.slice(-4)}`,
+      // PAY-KAR-002 FIX: Use cryptographically random UUID instead of timestamp + userId slice.
+      // Date.now() is predictable and enumerable — attackers can iterate timestamps and
+      // partial userIds to guess valid booking references. randomUUID() uses crypto RNG
+      // (UUID v4) making references unguessable and collision-resistant.
+      bookingReference: `BK-${randomUUID()}`,
+
       qrCheckedIn: false,
       qrCheckedOut: false,
       ngoApproved: false,

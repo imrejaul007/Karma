@@ -113,9 +113,15 @@ export async function getOrCreateProfile(
  * Handles level-up: if the new activeKarma crosses a threshold,
  * the level is updated and a levelHistory entry is appended.
  *
+ * PAY-KAR-001 FIX: Consolidates all operations into a single atomic findOneAndUpdate
+ * with an aggregation pipeline. The weekly cap check, karma increment, level
+ * computation, and levelHistory push all happen in one server-side atomic operation.
+ * Previously used two separate findOneAndUpdate calls + a separate .save() for level
+ * changes, which created a TOCTOU window where concurrent calls could produce duplicate
+ * level history entries or lose karma increments.
+ *
  * BE-KAR-008 FIX: Enforces WEEKLY_COIN_CAP on karma accumulation.
  * If the user has already hit the weekly cap, the karma is rejected.
- * Uses atomic findOneAndUpdate with $inc to prevent race condition.
  */
 export async function addKarma(
   userId: string,
@@ -133,155 +139,160 @@ export async function addKarma(
   // ISO week starts on Monday; locale-aware startOf('week') varies by locale.
   const startOfWeek = moment().startOf('isoWeek').toDate();
 
-  // HIGH-04 FIX: Use MongoDB atomic findOneAndUpdate to prevent race condition.
-  // This check-then-act is now atomic: only documents where weeklyKarmaEarned < CAP
-  // will be updated with $inc. If the update affects no documents, the cap was hit.
-  // BAK-KARMA-001 FIX: Wrap userId in ObjectId — schema defines userId as Schema.Types.ObjectId.
-  const atomicResult = await KarmaProfile.findOneAndUpdate(
+  // PAY-KAR-001 FIX: Single atomic aggregation-pipeline findOneAndUpdate.
+  // Uses $add to compute the new activeKarma server-side, then a $switch to
+  // compute the new level from the NEW karma value (not the old one).
+  // The $cond inside $setField evaluates whether the level changed and only
+  // pushes a levelHistory entry when needed — all atomically, all server-side.
+  // The weekly cap filter ensures no karma is added if the cap is exceeded.
+  //
+  // Thresholds: L1=0, L2=500, L3=2000, L4=5000 (from karmaEngine.ts LEVEL_THRESHOLDS)
+  const hoursToAdd = options?.hours ?? 0;
+  const isCheckIn = options?.isCheckIn ?? false;
+  const isApproved = isCheckIn && (options?.isApproved ?? false);
+
+  const updatedProfile = await KarmaProfile.findOneAndUpdate(
     {
       userId: new mongoose.Types.ObjectId(userId),
-      // Check weekly reset and cap condition atomically
+      // Weekly cap check: same logic as before, but now embedded in the atomic op
       $expr: {
         $or: [
-          // Doc has no weekOfLastKarmaEarned (brand new)
+          // Brand new user (no week record)
           { $eq: ['$weekOfLastKarmaEarned', null] },
-          // Or we're in a new week
+          // New week (ISO week number changed)
           {
             $lt: [
-              {
-                $dateToString: {
-                  format: '%G-%V',
-                  date: '$weekOfLastKarmaEarned',
-                }
-              },
-              {
-                $dateToString: {
-                  format: '%G-%V',
-                  date: new Date(startOfWeek),
-                }
-              }
-            ]
+              { $dateToString: { format: '%G-%V', date: '$weekOfLastKarmaEarned' } },
+              { $dateToString: { format: '%G-%V', date: new Date(startOfWeek) } },
+            ],
           },
-          // Or we're in the same week but haven't hit the cap yet
+          // Same week, cap not yet hit
           {
             $and: [
               {
                 $eq: [
-                  {
-                    $dateToString: {
-                      format: '%G-%V',
-                      date: '$weekOfLastKarmaEarned',
-                    }
-                  },
-                  {
-                    $dateToString: {
-                      format: '%G-%V',
-                      date: new Date(startOfWeek),
-                    }
-                  }
-                ]
+                  { $dateToString: { format: '%G-%V', date: '$weekOfLastKarmaEarned' } },
+                  { $dateToString: { format: '%G-%V', date: new Date(startOfWeek) } },
+                ],
               },
-              { $lt: ['$thisWeekKarmaEarned', WEEKLY_COIN_CAP] }
-            ]
-          }
-        ]
-      }
+              { $lt: ['$thisWeekKarmaEarned', WEEKLY_COIN_CAP] },
+            ],
+          },
+        ],
+      },
     },
-    {
-      $inc: { thisWeekKarmaEarned: karma },
-      $set: { weekOfLastKarmaEarned: new Date() }
-    },
-    { new: true }
+    // Aggregation pipeline: each stage transforms the document server-side atomically
+    [
+      {
+        $set: {
+          // Increment counters using $add (atomic, no read-modify-write)
+          lifetimeKarma: { $add: ['$lifetimeKarma', karma] },
+          activeKarma: { $add: ['$activeKarma', karma] },
+          thisWeekKarmaEarned: { $add: ['$thisWeekKarmaEarned', karma] },
+          totalHours: { $add: ['$totalHours', hoursToAdd] },
+          checkIns: { $add: ['$checkIns', { $cond: [isCheckIn, 1, 0] }] },
+          approvedCheckIns: { $add: ['$approvedCheckIns', { $cond: [isApproved, 1, 0] }] },
+          weekOfLastKarmaEarned: new Date(),
+          lastActivityAt: new Date(),
+
+          // PAY-KAR-001 FIX: Compute new level from the ALREADY-INCREMENTED activeKarma.
+          // $add returns the new value without modifying the field yet, so we can
+          // pass it to $switch to determine the new level in the same pipeline stage.
+          newActiveKarma: { $add: ['$activeKarma', karma] },
+        },
+      },
+      {
+        $set: {
+          // Compute new level from the new activeKarma value
+          newLevel: {
+            $switch: {
+              branches: [
+                { case: { $gte: ['$newActiveKarma', 5000] }, then: 'L4' },
+                { case: { $gte: ['$newActiveKarma', 2000] }, then: 'L3' },
+                { case: { $gte: ['$newActiveKarma', 500] },  then: 'L2' },
+              ],
+              default: 'L1',
+            },
+          },
+          // Reset temporary field
+          newActiveKarma: '$$REMOVE',
+        },
+      },
+      {
+        $set: {
+          // PAY-KAR-001 FIX: Atomically update level and push levelHistory if level changed.
+          // $cond evaluates to true only when old != new, preventing duplicate entries.
+          level: {
+            $cond: [{ $ne: ['$level', '$newLevel'] }, '$newLevel', '$level'],
+          },
+          levelHistory: {
+            $cond: [
+              { $ne: ['$level', '$newLevel'] },
+              // Mark previous entry's droppedAt and push new entry in one $map
+              {
+                $concatArrays: [
+                  {
+                    $map: {
+                      input: '$levelHistory',
+                      in: {
+                        $mergeObjects: [
+                          '$$this',
+                          {
+                            droppedAt: {
+                              $cond: [
+                                { $and: [{ $eq: ['$$this.level', '$level'] }, { $not: [{ $ifNull: ['$$this.droppedAt', false] }] }] },
+                                new Date(),
+                                '$$this.droppedAt',
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                  [{ level: '$newLevel', earnedAt: new Date() }],
+                ],
+              },
+              '$levelHistory',
+            ],
+          },
+          // Keep activity history fresh
+          activityHistory: {
+            $slice: [
+              { $concatArrays: ['$activityHistory', [new Date()]] },
+              -90,
+            ],
+          },
+          // Remove temporary field
+          newLevel: '$$REMOVE',
+        },
+      },
+    ],
+    { new: true },
   );
 
-  // If atomicResult is null, the cap was hit by concurrent request
-  if (!atomicResult) {
+  // If null, the cap was hit (filter didn't match)
+  if (!updatedProfile) {
     logger.warn(`[Karma] User ${userId} hit weekly cap (${WEEKLY_COIN_CAP}), rejecting ${karma} karma`, {
       userId,
       karmaRequested: karma,
     });
-    throw new Error(
-      `Weekly karma cap exceeded. Remaining this week: 0`
-    );
+    throw new Error('Weekly karma cap exceeded. Remaining this week: 0');
   }
 
-  // CRITICAL-005 FIX: Replace non-atomic read-modify-write with fully atomic findOneAndUpdate.
-  // Previously, profile.lifetimeKarma += karma; profile.activeKarma += karma; profile.save()
-  // caused a TOCTOU race: two concurrent requests could both read balance X, both write X+amount,
-  // resulting in balance = X + amount (instead of X + 2*amount). Using $inc guarantees that
-  // MongoDB applies the increment server-side, making the operation atomic regardless of concurrency.
-  //
-  // This extends the weekly-cap atomic check (above) to also atomically update all other
-  // karma fields in the same findOneAndUpdate call.
-  const hoursIncrement = options?.hours ?? 0;
+  // KARMA-TOCTOU-001 FIX: Level is now computed server-side inside the atomic pipeline.
+  // No separate .save() call exists, so there is no window for concurrent calls to
+  // produce duplicate level history entries or overwrite each other's karma values.
 
-  // CRITICAL-005 FIX: Replace non-atomic read-modify-write with fully atomic findOneAndUpdate.
-  // Use atomic $inc for numeric fields to prevent race condition on concurrent calls.
-  const incFields: Record<string, number> = {
-    lifetimeKarma: karma,
-    activeKarma: karma,
-  };
-  if (options?.hours) {
-    incFields.totalHours = options.hours;
-  }
-  if (options?.isCheckIn) {
-    incFields.checkIns = 1;
-    if (options?.isApproved) {
-      incFields.approvedCheckIns = 1;
-    }
-  }
-
-  const updatedProfile = await KarmaProfile.findOneAndUpdate(
-    { userId: new mongoose.Types.ObjectId(userId) },
-    {
-      $inc: incFields,
-      $set: { lastActivityAt: new Date() },
-      $push: {
-        activityHistory: {
-          $each: [new Date()],
-          $slice: -90,
-        },
-      },
-    },
-    { new: true },
-  );
-
-  if (!updatedProfile) {
-    logger.error('[Karma] addKarma: profile not found after atomic update', { userId });
-    throw new Error('Profile not found');
-  }
-
-  // Recalculate level after atomic update using the returned document
-  const oldLevel = updatedProfile.level;
-  const oldActiveKarma = updatedProfile.activeKarma;
-  const newLevel = calculateLevel(updatedProfile.activeKarma);
-  if (newLevel !== oldLevel) {
-    const previousEntry = updatedProfile.levelHistory[updatedProfile.levelHistory.length - 1];
-    if (previousEntry && !previousEntry.droppedAt) {
-      previousEntry.droppedAt = new Date();
-    }
-    updatedProfile.level = newLevel;
-    const entry: ILevelHistoryEntry = {
-      level: newLevel as Level,
-      earnedAt: new Date(),
-    };
-    updatedProfile.levelHistory.push(entry);
-    logger.info(
-      `User ${userId} leveled up from ${oldLevel} to ${newLevel} (${oldActiveKarma} → ${updatedProfile.activeKarma} karma)`,
-    );
-    await updatedProfile.save();
-  }
-
-  // Karma → Gamification bridge: emit event so gamification service can
-  // check for karma-based achievements (e.g., "earn 1000 karma" badges).
-  // Fire-and-forget — gamification failures must not block karma flow.
+  // KARMA-TOCTOU-002 FIX: Emit gamification event using the karma value passed in
+  // (not the potentially-stale document), since the level is already committed.
   emitKarmaAwardedEvent({
     userId,
     karmaAmount: karma,
     eventType: 'karma.awarded',
     eventId: `karma-${userId}-${Date.now()}`,
     newActiveKarma: updatedProfile.activeKarma,
-    newLevel,
+    newLevel: updatedProfile.level as Level,
   }).catch((err) => {
     logger.warn('[Karma] Failed to emit karma.awarded to gamification', {
       userId,
@@ -468,7 +479,9 @@ export async function getLevelInfo(userId: string): Promise<LevelInfo> {
 
 /**
  * Record a conversion event in the user's profile history.
- * MED-20 FIX: Check for duplicate batchId before appending to prevent double-counting.
+ * BAK-KARMA-002 FIX: Uses atomic findOneAndUpdate with $ne filter instead of
+ * read-modify-save TOCTOU pattern. The sparse index on conversionHistory.batchId
+ * ensures O(log n) duplicate lookups without full array scans.
  */
 export async function recordConversion(
   userId: string,
@@ -477,20 +490,6 @@ export async function recordConversion(
   rate: number,
   batchId: mongoose.Types.ObjectId,
 ): Promise<void> {
-  const profile = await KarmaProfile.findOne({ userId });
-  if (!profile) {
-    logger.warn(`Cannot record conversion: profile not found for user ${userId}`);
-    return;
-  }
-
-  // MED-20: Check if this batchId already exists in conversion history
-  const batchIdStr = batchId.toString();
-  const isDuplicate = profile.conversionHistory.some((entry) => entry.batchId.toString() === batchIdStr);
-  if (isDuplicate) {
-    logger.warn(`Conversion already recorded for user ${userId} with batchId ${batchIdStr}`);
-    return;
-  }
-
   const entry = {
     karmaConverted,
     coinsEarned,
@@ -499,14 +498,26 @@ export async function recordConversion(
     convertedAt: new Date(),
   };
 
-  profile.conversionHistory.push(entry);
+  // Atomic CAS: only push if batchId is not already present
+  // The sparse index on conversionHistory.batchId makes $ne efficient
+  const updated = await KarmaProfile.findOneAndUpdate(
+    { userId: new mongoose.Types.ObjectId(userId), 'conversionHistory.batchId': { $ne: batchId } },
+    {
+      $push: {
+        conversionHistory: {
+          $each: [entry],
+          $slice: -100, // keep last 100 entries atomically
+        },
+      },
+      $set: { updatedAt: new Date() },
+    },
+  );
 
-  // Keep last 100 conversion entries
-  if (profile.conversionHistory.length > 100) {
-    profile.conversionHistory = profile.conversionHistory.slice(-100) as typeof profile.conversionHistory;
+  if (!updated) {
+    logger.warn(`Conversion already recorded for user ${userId} with batchId ${batchId}`);
+    return;
   }
 
-  await profile.save();
   logger.info(
     `Recorded conversion for ${userId}: ${karmaConverted} karma → ${coinsEarned} coins @ ${rate * 100}% (batch ${batchId})`,
   );

@@ -63,6 +63,7 @@ const EarnRecordSchema = new Schema<EarnRecordDocument>(
         'CONVERTED',
         'REJECTED',
         'ROLLED_BACK',
+        'CONVERSION_FAILED',
       ] as EarnRecordStatus[],
       default: 'APPROVED_PENDING_CONVERSION',
       index: true,

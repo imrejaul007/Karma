@@ -10,7 +10,8 @@ export type EarnRecordStatus =
   | 'APPROVED_PENDING_CONVERSION'
   | 'CONVERTED'
   | 'REJECTED'
-  | 'ROLLED_BACK';
+  | 'ROLLED_BACK'
+  | 'CONVERSION_FAILED';
 
 export type BatchStatus = 'DRAFT' | 'READY' | 'EXECUTED' | 'PARTIAL' | 'PAUSED';
 

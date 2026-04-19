@@ -75,6 +75,7 @@ export interface CheckInResult {
   confidenceScore?: number;
   status?: ApprovalStatus;
   error?: string;
+  signals?: VerificationSignals;
 }
 
 export interface CheckOutResult {
@@ -315,10 +316,22 @@ export async function processCheckIn(
     }
 
     if (gpsCoords) {
-      // Look up event GPS radius (default 100m)
+      // BAK-KARMA-005 FIX: Fail closed — reject check-in if event GPS is missing.
+      // Null coalescing to (0,0) silently bypasses proximity check since virtually
+      // any land location is far from the Gulf of Guinea, producing gps_match=false
+      // while still applying QR-in bonus (0.30 weight) without GPS verification.
+      const eventLat = bookingDoc.eventLatitude as number | null;
+      const eventLng = bookingDoc.eventLongitude as number | null;
+      if (eventLat === null || eventLng === null) {
+        return {
+          success: false,
+          error: 'Event GPS coordinates not configured — GPS verification required',
+          signals,
+        };
+      }
       const gpsMatch = checkGPSProximity(
-        bookingDoc.eventLatitude as number ?? 0,
-        bookingDoc.eventLongitude as number ?? 0,
+        eventLat,
+        eventLng,
         gpsCoords.lat,
         gpsCoords.lng,
         bookingDoc.gpsRadius as number ?? 100,

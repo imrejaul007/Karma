@@ -231,10 +231,11 @@ export async function updateEarnRecordStatus(
   status: EarnRecordStatus,
 ): Promise<EarnRecordResponse | null> {
   const validTransitions: Record<EarnRecordStatus, EarnRecordStatus[]> = {
-    APPROVED_PENDING_CONVERSION: ['CONVERTED', 'REJECTED', 'ROLLED_BACK'],
+    APPROVED_PENDING_CONVERSION: ['CONVERTED', 'REJECTED', 'ROLLED_BACK', 'CONVERSION_FAILED'],
     CONVERTED: ['ROLLED_BACK'],
     REJECTED: ['ROLLED_BACK'],
     ROLLED_BACK: [],
+    CONVERSION_FAILED: ['ROLLED_BACK'],
   };
 
   const record = await EarnRecord.findById(recordId).lean();

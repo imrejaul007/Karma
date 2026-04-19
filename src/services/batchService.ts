@@ -220,7 +220,9 @@ export async function createBatchForPool(
   const totalCoins = Math.floor(groupData.totalCoinsEstimated);
 
   // Check pool availability
-  if (pool.coinPoolRemaining < totalCoins) {
+  const hasSufficientFunds = pool.coinPoolRemaining >= totalCoins;
+
+  if (!hasSufficientFunds) {
     log.warn('createBatchForPool: insufficient pool coins', {
       csrPoolId,
       required: totalCoins,
@@ -237,6 +239,9 @@ export async function createBatchForPool(
     anomalyFlags.push(...anomalies);
   }
 
+  // BAK-KARMA-004 FIX: Batch is only READY when pool has sufficient coins.
+  // DRAFT prevents execution until admin tops up the pool — users won't silently
+  // receive zero coins when the pool runs short.
   const batch = new Batch({
     weekStart,
     weekEnd,
@@ -245,7 +250,7 @@ export async function createBatchForPool(
     totalKarma: groupData.totalKarma,
     totalRezCoinsEstimated: totalCoins,
     totalRezCoinsExecuted: 0,
-    status: pool.coinPoolRemaining >= totalCoins ? 'READY' : 'DRAFT',
+    status: hasSufficientFunds ? 'READY' : 'DRAFT',
     anomalyFlags,
   });
 
@@ -462,6 +467,13 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
 
       if (!creditResult.success) {
         failed++;
+        // BAK-KARMA-003 FIX: Mark record as CONVERSION_FAILED so retries don't re-attempt.
+        // Without this, the record stays in APPROVED_PENDING_CONVERSION and a retry
+        // sees no terminal status — re-attempting the credit causes double-counting.
+        record.status = 'CONVERSION_FAILED';
+        record.convertedAt = new Date();
+        record.convertedBy = undefined;
+        await record.save();
         errors.push(`Record ${recordIdStr}: ${creditResult.error ?? 'wallet credit failed'}`);
         continue;
       }

@@ -35,7 +35,7 @@ const mockCreateServiceLogger = jest.fn(() => ({
 jest.mock('../src/models/EarnRecord', () => ({
   EarnRecord: {
     aggregate: mockEarnRecordAggregate,
-    find: mockEarnRecordFind,
+    find: (q: unknown) => ({ lean: () => mockEarnRecordFind(q) }),
     findOne: mockEarnRecordFindOne,
     updateMany: mockEarnRecordUpdateMany,
   },
@@ -53,9 +53,9 @@ jest.mock('../src/models/Batch', () => {
       };
     },
     BatchModel: {
-      findById: mockBatchFindById,
-      findOne: mockBatchFindOne,
-      find: mockBatchFind,
+      findById: (id: unknown) => ({ lean: () => mockBatchFindById(id) }),
+      findOne: (q: unknown) => ({ lean: () => mockBatchFindOne(q) }),
+      find: (q: unknown) => ({ lean: () => mockBatchFind(q) }),
       updateMany: mockBatchUpdateMany,
     },
   };
@@ -63,7 +63,9 @@ jest.mock('../src/models/Batch', () => {
 
 jest.mock('../src/models/CSRPool', () => ({
   CSRPool: {
-    findById: mockCSRPoolFindById,
+    findById: (id: unknown) => ({
+      lean: () => mockCSRPoolFindById(id),
+    }),
     updateOne: mockCSRPoolUpdateOne,
   },
 }));

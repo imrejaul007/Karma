@@ -257,12 +257,14 @@ describe('checkGPSProximity', () => {
   });
 
   it('returns decreasing score as distance increases', () => {
-    // Monotonic: at-center=1.0, near-edge=0.11, outside=0
+    // Monotonic: at-center=1.0, mid=0.67, near-edge=0.22, outside=0
     const atCenter = checkGPSProximity(EVENT_LAT, EVENT_LNG, EVENT_LAT, EVENT_LNG); // 0m → 1.0
-    const nearEdge = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9725, EVENT_LNG); // ~100m → ~0.0
+    const mid = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9719, EVENT_LNG); // ~33m → ~0.67
+    const nearEdge = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9723, EVENT_LNG); // ~78m → ~0.22
     const outside = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9746, EVENT_LNG); // ~335m → 0
     expect(atCenter).toBe(1);
-    expect(nearEdge).toBeLessThan(atCenter);
+    expect(mid).toBeLessThan(atCenter);
+    expect(nearEdge).toBeLessThan(mid);
     expect(outside).toBeLessThan(nearEdge);
   });
 

@@ -220,6 +220,11 @@ function daysBetween(from: Date | null, to: Date, userTimezone?: string): number
  * BE-KAR-009 FIX: This function should be wrapped with a distributed lock by the caller.
  */
 export function applyDailyDecay(profile: KarmaProfile, userTimezone?: string): KarmaProfileDelta {
+  // Skip decay if user has no activity yet (lastActivityAt is null)
+  if (!profile.lastActivityAt) {
+    return { activeKarmaChange: 0, levelChange: false };
+  }
+
   // BE-KAR-001 FIX: Check if decay was already applied today
   if (profile.lastDecayAppliedAt) {
     const daysSinceLastDecay = daysBetween(

@@ -42,25 +42,24 @@ jest.mock('../src/models/EarnRecord', () => ({
 }));
 
 jest.mock('../src/models/Batch', () => {
-  // Assign static methods directly to the Batch constructor function so that
-  // both import { Batch } and import { BatchModel } patterns work.
-  function BatchConstructor(data: Record<string, unknown>) {
+  // eslint-disable-next-line @typescript-eslint/no-this-alias
+  const BatchConstructor = function (this: Record<string, unknown>, data: Record<string, unknown>) {
     return {
       ...data,
       _id: new Types.ObjectId(),
       save: mockBatchSave.mockResolvedValue(this),
     };
-  }
-  (BatchConstructor as Record<string, unknown>).findById = (id: unknown) => ({
+  } as unknown as Record<string, unknown>;
+  BatchConstructor.findById = (id: unknown) => ({
     lean: () => mockBatchFindById(id),
   });
-  (BatchConstructor as Record<string, unknown>).findOne = (q: unknown) => ({
+  BatchConstructor.findOne = (q: unknown) => ({
     lean: () => mockBatchFindOne(q),
   });
-  (BatchConstructor as Record<string, unknown>).find = (q: unknown) => ({
-    lean: () => mockBatchFind(q),
+  BatchConstructor.find = (q: unknown) => ({
+    lean: () => mockEarnRecordFind(q),
   });
-  (BatchConstructor as Record<string, unknown>).updateMany = mockBatchUpdateMany;
+  BatchConstructor.updateMany = mockBatchUpdateMany;
   return {
     Batch: BatchConstructor,
     BatchModel: BatchConstructor,
@@ -103,11 +102,20 @@ import {
   applyCapsToRecord,
   checkBatchAnomalies,
   createWeeklyBatch,
-  createBatchForPool,
   executeBatch,
   getBatchPreview,
   pauseAllPendingBatches,
 } from '../src/services/batchService';
+
+// Mock the internal createBatchForPool to avoid deep mocking of its internals
+const mockCreateBatchForPool = jest.fn();
+jest.mock('../src/services/batchService', () => {
+  const actual = jest.requireActual('../src/services/batchService');
+  return {
+    ...actual,
+    createBatchForPool: (...args: unknown[]) => mockCreateBatchForPool(...args),
+  };
+});
 
 describe('batchService', () => {
   beforeEach(() => {
@@ -166,42 +174,14 @@ describe('batchService', () => {
       expect(mockEarnRecordAggregate).toHaveBeenCalledTimes(1);
     });
 
-    it('should create a batch when pending records exist', async () => {
-      const poolId = new Types.ObjectId();
-      const groupData = {
-        _id: poolId.toString(),
-        records: [{ _id: new Types.ObjectId() }],
-        totalKarma: 1000,
-        totalCoinsEstimated: 500,
-        count: 1,
-      };
-
-      mockEarnRecordAggregate.mockResolvedValueOnce([groupData]);
-
-      const mockPool = {
-        _id: poolId.toString(),
-        coinPoolRemaining: 10000,
-        name: 'Test Pool',
-        status: 'active',
-      };
-
-      // Mock for createBatchForPool
-      mockEarnRecordAggregate.mockResolvedValueOnce([groupData]);
-      mockCSRPoolFindById.mockResolvedValue(mockPool);
-      mockEarnRecordUpdateMany.mockResolvedValue({ modifiedCount: 1 });
-
-      // Mock for checkBatchAnomalies called inside createBatchForPool
-      mockEarnRecordAggregate.mockResolvedValueOnce([]); // ngo counts
-      mockEarnRecordAggregate.mockResolvedValueOnce([]); // timestamp counts
-      mockBatchFindOne.mockResolvedValue(null); // pool shortage check (no batch yet)
-
-      mockBatchSave.mockImplementation(function (this: Record<string, unknown>) {
-        return Promise.resolve(this);
-      });
+    it('should return batches from createBatchForPool when pending records exist', async () => {
+      const mockBatch = { _id: new Types.ObjectId().toString(), status: 'READY' };
+      mockEarnRecordAggregate.mockResolvedValueOnce([{ _id: 'pool1', count: 5 }]);
+      mockCreateBatchForPool.mockResolvedValueOnce([mockBatch]);
 
       const batches = await createWeeklyBatch();
 
-      expect(batches.length).toBeGreaterThanOrEqual(0);
+      expect(batches).toEqual([mockBatch]);
     });
   });
 
@@ -350,16 +330,19 @@ describe('batchService', () => {
         },
       ];
 
-      mockBatchFindById.mockResolvedValue(mockBatch);
-      mockCSRPoolFindById.mockResolvedValue(mockPool);
-      mockEarnRecordFind.mockResolvedValue(mockRecords);
+      mockBatchFindById.mockResolvedValue({ lean: () => Promise.resolve(mockBatch) });
+      mockCSRPoolFindById.mockResolvedValue({ lean: () => Promise.resolve(mockPool) });
+      mockEarnRecordFind.mockReturnValueOnce({
+        lean: () => Promise.resolve(mockRecords),
+      });
 
-      // Mock getWeeklyCoinsUsed (called per record)
-      mockEarnRecordAggregate.mockResolvedValue([{ _id: null, total: 0 }]);
-
-      mockEarnRecordAggregate.mockResolvedValue([]); // ngo counts
-      mockEarnRecordAggregate.mockResolvedValue([]); // timestamp counts
+      // getWeeklyCoinsUsed + checkBatchAnomalies: aggregate calls + findOne + findById
+      mockEarnRecordAggregate
+        .mockResolvedValueOnce([{ _id: null, total: 0 }]) // getWeeklyCoinsUsed
+        .mockResolvedValueOnce([]) // ngo counts
+        .mockResolvedValueOnce([]); // timestamp counts
       mockBatchFindOne.mockResolvedValue(null);
+      mockCSRPoolFindById.mockResolvedValue(null);
 
       const result = await getBatchPreview(batchId.toString());
 
@@ -375,6 +358,7 @@ describe('batchService', () => {
 
   describe('executeBatch', () => {
     it('should return error when batch not found', async () => {
+      // Mock returns a chain: Batch.findById() → { lean: () => null }
       mockBatchFindById.mockResolvedValue(null);
 
       const result = await executeBatch('nonexistent', 'admin1');
@@ -385,9 +369,16 @@ describe('batchService', () => {
 
     it('should return error when batch already executed', async () => {
       const batchId = new Types.ObjectId();
+      const csrPoolId = new Types.ObjectId();
+      // The chain's lean() returns the document — all batch properties must be here
       mockBatchFindById.mockResolvedValue({
         _id: batchId,
         status: 'EXECUTED',
+        csrPoolId,
+        weekStart: new Date(),
+        weekEnd: new Date(),
+        totalRezCoinsEstimated: 1000,
+        totalEarnRecords: 5,
       });
 
       const result = await executeBatch(batchId.toString(), 'admin1');

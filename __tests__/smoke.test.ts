@@ -15,9 +15,9 @@
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3009';
 const SKIP_SMOKE = process.env.SKIP_SMOKE_TESTS === 'true' || process.env.SKIP_SMOKE_TESTS === '1';
 
-async function fetchRaw(url: string) {
+async function fetchRaw(url: string, init?: RequestInit) {
   try {
-    return await fetch(url);
+    return await fetch(url, init);
   } catch {
     return null;
   }

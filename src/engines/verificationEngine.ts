@@ -252,8 +252,8 @@ export function checkGPSProximity(
   const distanceMeters = EARTH_RADIUS_M * c;
 
   if (distanceMeters <= radiusMeters) {
-    // Linear falloff from 1.0 at center to ~0.9 at edge
-    return Math.max(0.5, 1 - distanceMeters / radiusMeters);
+    // Linear falloff from 1.0 at center to 0.0 at edge
+    return Math.round((1 - distanceMeters / radiusMeters) * 100) / 100;
   }
 
   // Outside radius: score drops rapidly

@@ -36,6 +36,8 @@ function mockAuth(userId: string = '507f1f77bcf86cd799439011', role: string = 'u
   };
 }
 
+// Mock MongoDB model — mocks are created inline in jest.mock factory and exported below
+
 // Mock the requireAuth middleware for all tests
 jest.mock('../middleware/auth', () => ({
   requireAuth: (
@@ -59,12 +61,6 @@ jest.mock('../middleware/auth', () => ({
   },
 }));
 
-// Mock MongoDB model
-const mockFindOne = jest.fn();
-const mockFindByIdAndUpdate = jest.fn();
-const mockFindById = jest.fn();
-const mockSave = jest.fn();
-
 jest.mock('mongoose', () => {
   const actual = jest.requireActual('mongoose') as typeof import('mongoose');
   return {
@@ -72,13 +68,21 @@ jest.mock('mongoose', () => {
     models: {
       ...actual.models,
       EventBooking: {
-        findOne: mockFindOne,
-        findByIdAndUpdate: mockFindByIdAndUpdate,
-        findById: mockFindById,
+        findOne: jest.fn(),
+        findByIdAndUpdate: jest.fn(),
+        findById: jest.fn(),
       },
     },
   };
 });
+
+// Export the mocked model for test cases
+const mongooseMock = jest.requireMock('mongoose');
+const EventBookingMock = mongooseMock.models.EventBooking;
+export const mockFindOne = EventBookingMock.findOne as jest.Mock;
+export const mockFindByIdAndUpdate = EventBookingMock.findByIdAndUpdate as jest.Mock;
+export const mockFindById = EventBookingMock.findById as jest.Mock;
+export const mockSave = jest.fn();
 
 // ---------------------------------------------------------------------------
 // Build app with mocked routes
@@ -86,13 +90,29 @@ jest.mock('mongoose', () => {
 
 let app: Express;
 
+// Auth guard used by inline test handlers
+function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ success: false, message: 'No token provided' });
+    return;
+  }
+  const token = authHeader.slice(7);
+  if (token === 'invalid') {
+    res.status(401).json({ success: false, message: 'Invalid token' });
+    return;
+  }
+  (req as express.Request & { userId?: string }).userId = '507f1f77bcf86cd799439011';
+  next();
+}
+
 beforeAll(() => {
   app = express();
   app.use(express.json());
 
   // Inline route handlers for controlled testing (avoids full Express app init)
   // These mirror the actual route logic but with MongoDB mocked
-  app.post('/api/karma/verify/checkin', async (req, res) => {
+  app.post('/api/karma/verify/checkin', requireAuth, async (req, res) => {
     const { userId, eventId, mode, qrCode, gpsCoords } = req.body;
 
     if (!userId || !eventId) {
@@ -130,7 +150,7 @@ beforeAll(() => {
     });
   });
 
-  app.post('/api/karma/verify/checkout', async (req, res) => {
+  app.post('/api/karma/verify/checkout', requireAuth, async (req, res) => {
     const { userId, eventId, mode, qrCode } = req.body;
 
     if (!userId || !eventId) {
@@ -177,7 +197,7 @@ beforeAll(() => {
     });
   });
 
-  app.get('/api/karma/verify/status/:bookingId', async (req, res) => {
+  app.get('/api/karma/verify/status/:bookingId', requireAuth, async (req, res) => {
     const { bookingId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {

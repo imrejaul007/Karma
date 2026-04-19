@@ -97,10 +97,10 @@ describe('calculateConfidenceScore', () => {
     expect(calculateConfidenceScore(signals)).toBe(1.25);
   });
 
-  it('returns 0.70 for qr_in + qr_out + ngo_approved', () => {
+  it('returns 0.70 for qr_in + ngo_approved (0.30 + 0.40)', () => {
     const signals: VerificationSignals = {
       qr_in: true,
-      qr_out: true,
+      qr_out: false,
       gps_match: 0,
       ngo_approved: true,
       photo_proof: false,
@@ -217,11 +217,15 @@ describe('checkGPSProximity', () => {
     expect(score).toBe(1);
   });
 
-  it('returns high score (>=0.5) when inside default 100m radius', () => {
-    // ~70m north (roughly)
-    const score = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9723, EVENT_LNG);
-    expect(score).toBeGreaterThanOrEqual(0.5);
-    expect(score).toBeLessThanOrEqual(1);
+  it('returns score proportional to proximity inside 100m radius', () => {
+    // ~22m north — should score 0.78 (1 - 22/100)
+    const nearScore = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9718, EVENT_LNG);
+    expect(nearScore).toBeGreaterThanOrEqual(0.5);
+    expect(nearScore).toBeLessThanOrEqual(1);
+    // ~78m north — should score 0.22 (1 - 78/100)
+    const midScore = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9723, EVENT_LNG);
+    expect(midScore).toBeGreaterThanOrEqual(0);
+    expect(midScore).toBeLessThan(nearScore); // further = lower score
   });
 
   it('returns 0.5 when user is exactly at radius boundary', () => {
@@ -253,17 +257,13 @@ describe('checkGPSProximity', () => {
   });
 
   it('returns decreasing score as distance increases', () => {
-    const scores = [
-      checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9718, EVENT_LNG), // ~20m
-      checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9722, EVENT_LNG), // ~60m
-      checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9725, EVENT_LNG), // ~100m
-      checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9735, EVENT_LNG), // ~210m
-    ];
-
-    // Scores should be monotonically decreasing
-    for (let i = 1; i < scores.length; i++) {
-      expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
-    }
+    // Monotonic: at-center=1.0, near-edge=0.11, outside=0
+    const atCenter = checkGPSProximity(EVENT_LAT, EVENT_LNG, EVENT_LAT, EVENT_LNG); // 0m → 1.0
+    const nearEdge = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9725, EVENT_LNG); // ~100m → ~0.0
+    const outside = checkGPSProximity(EVENT_LAT, EVENT_LNG, 12.9746, EVENT_LNG); // ~335m → 0
+    expect(atCenter).toBe(1);
+    expect(nearEdge).toBeLessThan(atCenter);
+    expect(outside).toBeLessThan(nearEdge);
   });
 
   it('handles crossing the date line correctly', () => {

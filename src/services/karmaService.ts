@@ -136,9 +136,10 @@ export async function addKarma(
   // HIGH-04 FIX: Use MongoDB atomic findOneAndUpdate to prevent race condition.
   // This check-then-act is now atomic: only documents where weeklyKarmaEarned < CAP
   // will be updated with $inc. If the update affects no documents, the cap was hit.
+  // BAK-KARMA-001 FIX: Wrap userId in ObjectId — schema defines userId as Schema.Types.ObjectId.
   const atomicResult = await KarmaProfile.findOneAndUpdate(
     {
-      userId,
+      userId: new mongoose.Types.ObjectId(userId),
       // Check weekly reset and cap condition atomically
       $expr: {
         $or: [
@@ -231,7 +232,7 @@ export async function addKarma(
   }
 
   const updatedProfile = await KarmaProfile.findOneAndUpdate(
-    { userId },
+    { userId: new mongoose.Types.ObjectId(userId) },
     {
       $inc: incFields,
       $set: { lastActivityAt: new Date() },

@@ -265,9 +265,9 @@ describe('karmaEngine', () => {
     it('applies 40% decay when inactive 45-59 days', () => {
       const profile = makeProfile(1000, 50, 'L2');
       const delta = applyDailyDecay(profile);
-      // 1000 * (1 - 0.40) = 600
+      // 1000 * (1 - 0.40) = 600 — still within L2 range, no level change
       expect(delta.activeKarmaChange).toBe(-400);
-      expect(delta.levelChange).toBe(true); // 600 → L2, was L2 → no change
+      expect(delta.levelChange).toBe(false);
       expect(delta.newLevel).toBe('L2');
     });
 

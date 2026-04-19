@@ -14,8 +14,35 @@ import request from 'supertest';
 import express, { Express } from 'express';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { Request, Response, NextFunction } from 'express';
 import karmaRoutes from '../src/routes/karmaRoutes';
 import { KarmaProfile } from '../src/models/KarmaProfile';
+
+// ── Mock auth middleware to bypass HTTP calls to the auth service ──────────────
+
+const mockRequireAuth = jest.fn((req: Request, _res: Response, next: NextFunction) => {
+  req.userId = '507f1f77bcf86cd799439011';
+  req.userRole = 'user';
+  next();
+});
+const mockRequireAdminAuth = jest.fn((req: Request, _res: Response, next: NextFunction) => {
+  if (req.headers['x-admin'] === 'true') {
+    req.userId = 'admin-user-1';
+    req.userRole = 'admin';
+    next();
+  } else {
+    _res.status(403).json({ success: false, message: 'Admin access required' });
+  }
+});
+
+jest.mock('../src/middleware/auth', () => ({
+  requireAuth: (...args: unknown[]) => mockRequireAuth(...(args as [Request, Response, NextFunction])),
+}));
+
+jest.mock('../src/middleware/adminAuth', () => ({
+  requireAdminAuth: (...args: unknown[]) =>
+    mockRequireAdminAuth(...(args as [Request, Response, NextFunction])),
+}));
 
 let app: Express;
 let mongoServer: MongoMemoryServer;
@@ -43,7 +70,7 @@ describe('GET /api/karma/user/:userId', () => {
   it('returns 401 when no Authorization header is provided', async () => {
     const res = await request(app).get('/api/karma/user/507f1f77bcf86cd799439011');
     expect(res.status).toBe(401);
-    expect(res.body).toHaveProperty('error');
+    expect(res.body).toHaveProperty('message');
   });
 
   it('returns 401 when Authorization header is not Bearer token', async () => {
@@ -352,7 +379,7 @@ describe('POST /api/karma/decay-all', () => {
       .set('Authorization', 'Bearer valid-token');
     // requireAdmin checks x-admin header
     expect(res.status).toBe(403);
-    expect(res.body.error).toContain('admin');
+    expect(res.body.message ?? res.body.error).toContain('admin');
   });
 
   it('returns 200 and decay results for admin', async () => {

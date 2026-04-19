@@ -437,16 +437,23 @@ export async function processCheckOut(
     }
 
     if (gpsCoords) {
-      signals.gps_match = Math.max(
-        signals.gps_match,
-        checkGPSProximity(
-          (raw.eventLatitude as number) ?? 0,
-          (raw.eventLongitude as number) ?? 0,
-          gpsCoords.lat,
-          gpsCoords.lng,
-          (raw.gpsRadius as number) ?? 100,
-        ),
-      );
+      // BAK-KARMA-005 FIX: Fail closed — return 0 proximity score if event GPS is missing.
+      // Using null coalescing to (0,0) bypasses the proximity check because any real user
+      // location is far from the Gulf of Guinea, making checkGPSProximity return 0 regardless.
+      // But this still lets the GPS block contribute 0 to the confidence score, which is the
+      // correct safe behavior: no GPS data means no GPS bonus.
+      const eventLat = raw.eventLatitude as number | null;
+      const eventLng = raw.eventLongitude as number | null;
+      const gpsMatch = (eventLat !== null && eventLng !== null)
+        ? checkGPSProximity(
+            eventLat,
+            eventLng,
+            gpsCoords.lat,
+            gpsCoords.lng,
+            (raw.gpsRadius as number) ?? 100,
+          )
+        : 0;
+      signals.gps_match = Math.max(signals.gps_match, gpsMatch);
     }
 
     const confidenceScore = calculateConfidenceScore(signals);

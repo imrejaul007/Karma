@@ -81,7 +81,7 @@ jest.mock('../middleware/auth', () => ({
 
 // Create Express app after mocks
 import express from 'express';
-import batchRoutes from '../routes/batchRoutes';
+import batchRoutes from '../src/routes/batchRoutes';
 
 const app = express();
 app.use(express.json());

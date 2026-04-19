@@ -42,22 +42,28 @@ jest.mock('../src/models/EarnRecord', () => ({
 }));
 
 jest.mock('../src/models/Batch', () => {
-  const actual = jest.requireActual('../src/models/Batch');
+  // Assign static methods directly to the Batch constructor function so that
+  // both import { Batch } and import { BatchModel } patterns work.
+  function BatchConstructor(data: Record<string, unknown>) {
+    return {
+      ...data,
+      _id: new Types.ObjectId(),
+      save: mockBatchSave.mockResolvedValue(this),
+    };
+  }
+  (BatchConstructor as Record<string, unknown>).findById = (id: unknown) => ({
+    lean: () => mockBatchFindById(id),
+  });
+  (BatchConstructor as Record<string, unknown>).findOne = (q: unknown) => ({
+    lean: () => mockBatchFindOne(q),
+  });
+  (BatchConstructor as Record<string, unknown>).find = (q: unknown) => ({
+    lean: () => mockBatchFind(q),
+  });
+  (BatchConstructor as Record<string, unknown>).updateMany = mockBatchUpdateMany;
   return {
-    ...actual,
-    Batch: function (data: Record<string, unknown>) {
-      return {
-        ...data,
-        _id: new Types.ObjectId(),
-        save: mockBatchSave.mockResolvedValue(this),
-      };
-    },
-    BatchModel: {
-      findById: (id: unknown) => ({ lean: () => mockBatchFindById(id) }),
-      findOne: (q: unknown) => ({ lean: () => mockBatchFindOne(q) }),
-      find: (q: unknown) => ({ lean: () => mockBatchFind(q) }),
-      updateMany: mockBatchUpdateMany,
-    },
+    Batch: BatchConstructor,
+    BatchModel: BatchConstructor,
   };
 });
 

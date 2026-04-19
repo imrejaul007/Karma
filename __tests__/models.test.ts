@@ -110,6 +110,9 @@ describe('EarnRecord model', () => {
     const bookingId = new mongoose.Types.ObjectId();
     const csrPoolId = new mongoose.Types.ObjectId();
 
+    // Ensure the unique index is created before testing uniqueness
+    await EarnRecord.ensureIndexes();
+
     await EarnRecord.create({
       userId, eventId, bookingId,
       karmaEarned: 100,

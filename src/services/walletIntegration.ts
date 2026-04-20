@@ -28,16 +28,29 @@ export interface WalletCreditResult {
 }
 
 let walletClient: AxiosInstance | null = null;
+let tokenValidated = false;
 
 function getWalletClient(): AxiosInstance {
+  // PAY-KAR-006 FIX: Validate token once at first call. Previously, if neither
+  // INTERNAL_SERVICE_KEY nor INTERNAL_SERVICE_TOKEN was set, the client was
+  // created with 'X-Internal-Token: undefined' (the literal string), sending a
+  // forged header that downstream services would reject or ignore silently.
+  if (!tokenValidated) {
+    const token = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
+    if (!token) {
+      throw new Error('INTERNAL_SERVICE_KEY / INTERNAL_SERVICE_TOKEN is not configured');
+    }
+    tokenValidated = true;
+  }
+
   if (!walletClient) {
+    const token = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
     walletClient = axios.create({
       baseURL: walletServiceUrl,
       timeout: 10_000,
       headers: {
         'Content-Type': 'application/json',
-        // G-KS-C9 FIX: All internal service calls must include the internal service token.
-        'X-Internal-Token': (process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN) ?? '',
+        'X-Internal-Token': token,
       },
     });
   }

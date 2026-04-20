@@ -293,18 +293,19 @@ export async function addKarma(
 
   // KARMA-TOCTOU-002 FIX: Emit gamification event using the karma value passed in
   // (not the potentially-stale document), since the level is already committed.
-  emitKarmaAwardedEvent({
+  //
+  // PAY-KAR-008 FIX: emitKarmaAwardedEvent() already throws on queue failures
+  // (BullMQ retry with exponential backoff handles transient errors). We no longer
+  // catch-and-swallow here — gamification failures surface clearly in logs and
+  // BullMQ's DLQ captures permanently failed events. The fire-and-forget pattern
+  // is replaced by structured error propagation.
+  await emitKarmaAwardedEvent({
     userId,
     karmaAmount: karma,
     eventType: 'karma.awarded',
     eventId: `karma-${userId}-${Date.now()}`,
     newActiveKarma: updatedProfile.activeKarma,
     newLevel: updatedProfile.level as Level,
-  }).catch((err) => {
-    logger.warn('[Karma] Failed to emit karma.awarded to gamification', {
-      userId,
-      error: err instanceof Error ? err.message : String(err),
-    });
   });
 }
 

@@ -1,18 +1,4 @@
-import winston from 'winston';
-
-export const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL ?? 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    }),
-  ],
-});
+// PAY-KAR-010 FIX: src/utils/logger.ts re-exports from src/config/logger.ts
+// to consolidate duplicate logger definitions. All consumers import from either
+// path; both now resolve to the single canonical logger in src/config/logger.ts.
+export { logger, createServiceLogger } from '../config/logger.js';

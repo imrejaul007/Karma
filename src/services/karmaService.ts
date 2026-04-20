@@ -134,6 +134,13 @@ export async function addKarma(
     isApproved?: boolean;
   },
 ): Promise<void> {
+  // PAY-KAR-005 FIX: Reject invalid karma values before any DB operation.
+  // Without this, an attacker can pass karma = -9999999 to drain user karma,
+  // or NaN/Infinity to corrupt account state.
+  if (typeof karma !== 'number' || !Number.isFinite(karma) || karma <= 0) {
+    throw new Error(`Invalid karma value: ${karma}`);
+  }
+
   const WEEKLY_COIN_CAP = 300;
   // G-KS-B5 FIX: Use startOf('isoWeek') to match batchService consistency.
   // ISO week starts on Monday; locale-aware startOf('week') varies by locale.

@@ -102,7 +102,7 @@ router.post('/checkin', requireAuth, async (req: Request, res: Response): Promis
 
     const { userId, eventId, mode, qrCode, gpsCoords } = parseResult.data;
 
-    if (req.userId && req.userId !== userId && req.userRole !== 'admin' && req.userRole !== 'superadmin') {
+    if (req.userId && req.userId !== userId && req.userRole?.toLowerCase() !== 'admin' && req.userRole?.toLowerCase() !== 'superadmin') {
       res.status(403).json({ success: false, message: 'Cannot check in on behalf of another user' });
       return;
     }
@@ -149,7 +149,7 @@ router.post('/checkout', requireAuth, async (req: Request, res: Response): Promi
 
     const { userId, eventId, mode, qrCode, gpsCoords } = parseResult.data;
 
-    if (req.userId && req.userId !== userId && req.userRole !== 'admin' && req.userRole !== 'superadmin') {
+    if (req.userId && req.userId !== userId && req.userRole?.toLowerCase() !== 'admin' && req.userRole?.toLowerCase() !== 'superadmin') {
       res.status(403).json({ success: false, message: 'Cannot check out on behalf of another user' });
       return;
     }
@@ -209,8 +209,8 @@ router.get('/status/:bookingId', requireAuth, async (req: Request, res: Response
     if (
       req.userId &&
       req.userId !== bookingUserIdStr &&
-      req.userRole !== 'admin' &&
-      req.userRole !== 'superadmin'
+      req.userRole?.toLowerCase() !== 'admin' &&
+      req.userRole?.toLowerCase() !== 'superadmin'
     ) {
       res.status(403).json({ success: false, message: 'Access denied' });
       return;

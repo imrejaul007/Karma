@@ -481,10 +481,14 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
       // Update record
       record.status = 'CONVERTED';
       record.convertedAt = new Date();
-      // G-KS-F10 FIX: Validate adminId is a valid ObjectId before casting.
-      record.convertedBy = Types.ObjectId.isValid(adminId)
-        ? new Types.ObjectId(adminId)
-        : undefined;
+      // PAY-KAR-007 FIX: adminId is already validated at the top of executeBatch.
+      // If the format is invalid, the function throws before reaching this line.
+      // We add an explicit guard here as defense-in-depth to ensure audit trail
+      // never silently loses attribution due to a cast failure.
+      if (!Types.ObjectId.isValid(adminId)) {
+        throw new Error(`PAY-KAR-007: Invalid adminId format "${adminId}" — audit trail requires valid ObjectId`);
+      }
+      record.convertedBy = new Types.ObjectId(adminId);
       record.rezCoinsEarned = cappedCoins;
       record.idempotencyKey = idempotencyKey;
       await record.save();
@@ -535,10 +539,20 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
   batch.status = failed > 0 ? 'PARTIAL' : 'EXECUTED';
   batch.totalRezCoinsExecuted = totalCoinsIssued;
   batch.executedAt = new Date();
-  // G-KS-F10 FIX: Validate adminId before casting to ObjectId.
-  batch.executedBy = Types.ObjectId.isValid(adminId)
-    ? new Types.ObjectId(adminId)
-    : undefined;
+  // PAY-KAR-007 FIX: Throw if adminId is not a valid ObjectId — silently proceeding
+  // with undefined means the audit trail has no attribution for batch execution.
+  if (!Types.ObjectId.isValid(adminId)) {
+    return {
+      success: false,
+      batchId,
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      totalCoinsIssued: 0,
+      errors: [`PAY-KAR-007: Invalid adminId format "${adminId}" — audit trail requires valid ObjectId`],
+    };
+  }
+  batch.executedBy = new Types.ObjectId(adminId);
   await batch.save();
 
   // Log audit

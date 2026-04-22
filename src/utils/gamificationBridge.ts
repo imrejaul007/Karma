@@ -38,6 +38,15 @@ function getGamificationQueue(): Queue {
         removeOnFail: { count: 5000 },
       },
     });
+    // BullMQ Queue instances emit `error` events separately from the
+    // connection. Without a listener Node treats them as unhandled. Log
+    // and continue — retry semantics are already on the default job options.
+    gamificationQueue.on('error', (err) => {
+      log.error('[GamificationBridge] Queue error (non-fatal)', {
+        queue: GAMIFICATION_QUEUE_NAME,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
     log.info('[GamificationBridge] Queue initialized', { queue: GAMIFICATION_QUEUE_NAME });
   }
   return gamificationQueue;

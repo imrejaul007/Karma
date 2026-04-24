@@ -474,6 +474,20 @@ export async function processCheckOut(
     let earnRecord: Record<string, unknown> | undefined;
 
     if (status === 'verified') {
+      // Fetch KarmaEvent to get category and duration for profile tracking
+      let category: string | undefined;
+      let hours: number | undefined;
+      try {
+        const { KarmaEvent } = await import('../models/index.js');
+        const karmaEvent = await KarmaEvent.findOne({
+          $or: [{ _id: eventId }, { merchantEventId: eventId }],
+        }).lean() as Record<string, unknown> | null;
+        if (karmaEvent) {
+          category = karmaEvent.category as string;
+          hours = karmaEvent.expectedDurationHours as number;
+        }
+      } catch { /* non-fatal — category tracking is best-effort */ }
+
       // Create earn record (lazy import to avoid circular dependency)
       const { createEarnRecord } = await import('../services/earnRecordService.js');
       const record = await createEarnRecord({
@@ -484,6 +498,8 @@ export async function processCheckOut(
         confidenceScore,
         karmaEarned: (raw.karmaEarned as number) ?? 0,
         csrPoolId: (raw.csrPoolId as string) ?? '',
+        category,
+        hours,
       });
       earnRecord = record as unknown as Record<string, unknown>;
     }

@@ -470,10 +470,21 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
         // BAK-KARMA-003 FIX: Mark record as CONVERSION_FAILED so retries don't re-attempt.
         // Without this, the record stays in APPROVED_PENDING_CONVERSION and a retry
         // sees no terminal status — re-attempting the credit causes double-counting.
-        record.status = 'CONVERSION_FAILED';
-        record.convertedAt = new Date();
-        record.convertedBy = undefined;
-        await record.save();
+        try {
+          record.status = 'CONVERSION_FAILED';
+          record.convertedAt = new Date();
+          record.convertedBy = undefined;
+          await record.save();
+        } catch (saveErr) {
+          // HIGH-6 FIX: Wrap record.save() to prevent error swallowing.
+          // If save() throws, the record stays in APPROVED_PENDING_CONVERSION (retryable).
+          // Log the save error separately from the wallet error so both are visible.
+          log.error('executeBatch: record status update failed', {
+            recordId: recordIdStr,
+            walletError: creditResult.error,
+            saveError: (saveErr as Error).message,
+          });
+        }
         errors.push(`Record ${recordIdStr}: ${creditResult.error ?? 'wallet credit failed'}`);
         continue;
       }

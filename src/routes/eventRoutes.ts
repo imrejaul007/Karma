@@ -13,7 +13,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { KarmaEvent } from '../models/index.js';
 import { EventBookingModel } from '../engines/verificationEngine.js';
 import { merchantServiceUrl } from '../config/index.js';
-import { logger } from '../utils/logger.js';
+import { logger } from '../config/logger.js';
 
 const router = Router();
 
@@ -117,7 +117,7 @@ async function enrichWithMerchantEvent(
       };
     });
   } catch (err) {
-    logger.warn('Failed to enrich events with merchant data', { error: err });
+    logger.warn('Failed to enrich events with merchant data — returning partial data', { error: err });
     return events.map((e) => ({
       ...toKarmaEventResponse(e, joinedEventIds.has(e._id.toString())),
       name: 'Event',

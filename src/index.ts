@@ -146,6 +146,14 @@ async function start() {
     process.exit(1);
   }
 
+  // HIGH-7 FIX: Fail fast if internal service token is missing — all wallet operations
+  // would silently fail at runtime without this, so validate at startup.
+  const internalToken = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
+  if (!internalToken) {
+    logger.error('[FATAL] INTERNAL_SERVICE_KEY / INTERNAL_SERVICE_TOKEN is not configured');
+    process.exit(1);
+  }
+
   await connectMongoDB();
 
   // XS-CRIT-007 FIX: Start the coin event subscriber so the karma service can

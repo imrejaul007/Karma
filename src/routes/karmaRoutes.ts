@@ -17,8 +17,9 @@ import {
   getKarmaHistory,
   applyDecayToAll,
 } from '../services/karmaService.js';
-import { nextLevelThreshold, karmaToNextLevel } from '../engines/karmaEngine.js';
-import { logger } from '../utils/logger.js';
+import { nextLevelThreshold, karmaToNextLevel, getConversionRate } from '../engines/karmaEngine.js';
+import type { Level } from '../types/index.js';
+import { logger } from '../config/logger.js';
 
 const router = Router();
 
@@ -62,14 +63,7 @@ router.get('/user/:userId', requireAuth, async (req: Request, res: Response) => 
       lifetimeKarma: profile.lifetimeKarma,
       activeKarma: profile.activeKarma,
       level: profile.level,
-      conversionRate:
-        profile.level === 'L4'
-          ? 1.0
-          : profile.level === 'L3'
-            ? 0.75
-            : profile.level === 'L2'
-              ? 0.5
-              : 0.25,
+      conversionRate: getConversionRate(profile.level as Level),
       eventsCompleted: profile.eventsCompleted,
       totalHours: profile.totalHours,
       trustScore: profile.trustScore,

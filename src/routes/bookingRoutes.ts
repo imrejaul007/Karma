@@ -10,7 +10,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { KarmaEvent } from '../models/index.js';
 import { EventBookingModel } from '../engines/verificationEngine.js';
 import { merchantServiceUrl } from '../config/index.js';
-import { logger } from '../utils/logger.js';
+import { logger } from '../config/logger.js';
 
 const router = Router();
 

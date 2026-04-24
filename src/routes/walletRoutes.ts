@@ -8,7 +8,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { walletServiceUrl } from '../config/index.js';
 import { getKarmaBalance } from '../services/walletIntegration.js';
-import { logger } from '../utils/logger.js';
+import { logger } from '../config/logger.js';
 
 const router = Router();
 

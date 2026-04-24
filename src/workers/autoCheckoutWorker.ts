@@ -106,9 +106,13 @@ export async function processForgottenCheckouts(): Promise<AutoCheckoutResult> {
 
         if (!event) {
           result.skipped++;
-          logger.warn('[AutoCheckoutWorker] Event not found for booking', {
+          // LOW-15 FIX: Orphaned booking — no KarmaEvent exists for this booking.
+          // Log at error level so this surfaces in monitoring/alerting rather than
+          // silently skipping every hour. The booking has no karma event to match.
+          logger.error('[AutoCheckoutWorker] Orphaned booking — no KarmaEvent found', {
             bookingId: typedBooking._id,
             eventId,
+            userId: raw.userId,
           });
           continue;
         }

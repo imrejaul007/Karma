@@ -5,6 +5,7 @@
  * GET /stats is public for dashboards.
  */
 import { Router, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { requireAdminAuth } from '../middleware/adminAuth.js';
 import { Batch } from '../models/Batch.js';
 import { EarnRecord } from '../models/EarnRecord.js';
@@ -79,6 +80,10 @@ router.get('/', requireAdminAuth, async (_req: Request, res: Response): Promise<
  */
 router.get('/:id', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ success: false, message: 'Invalid batch ID format' });
+      return;
+    }
     const batch = await Batch.findById(req.params.id).lean();
     if (!batch) {
       res.status(404).json({ success: false, message: 'Batch not found' });
@@ -146,6 +151,10 @@ router.get('/:id/preview', requireAdminAuth, async (req: Request, res: Response)
  */
 router.post('/:id/execute', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ success: false, message: 'Invalid batch ID format' });
+      return;
+    }
     const batch = await Batch.findById(req.params.id);
     if (!batch) {
       res.status(404).json({ success: false, message: 'Batch not found' });
@@ -217,9 +226,6 @@ router.post('/pause-all', requireAdminAuth, async (req: Request, res: Response):
  * GET /api/karma/batch/stats
  * Overall batch statistics. Admin-only — exposes financial metrics.
  */
-// G-KS-C5 FIX: requireAdmin was undefined (not exported from adminAuth).
-// Use requireAdminAuth which calls requireAuth + role check.
-// Exposing financial batch stats without auth is a critical information-disclosure risk.
 router.get('/stats', requireAdminAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
     const [totalBatches, executedBatches, pendingBatches, partialBatches, recordStats, coinStats] =

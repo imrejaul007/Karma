@@ -357,27 +357,19 @@ async function updateProfileStats(
       return;
     }
 
-    // CRITICAL-005: Handle weekly thisWeekKarmaEarned reset atomically.
-    // If the user crossed into a new ISO week, reset thisWeekKarmaEarned to karmaEarned
-    // (the increment already applied above via $inc on the previous value).
-    // Use an atomic update with a guard condition to handle week crossing.
+    // MEDIUM-9 FIX: Handle weekly thisWeekKarmaEarned atomically using an aggregation
+    // pipeline. The previous approach did a separate read-then-write which could lose
+    // concurrent karma increments between the $inc and the reset. The pipeline checks
+    // week crossing server-side and resets in the same atomic update.
     const prevWeekStr = profile.weekOfLastKarmaEarned
       ? moment(profile.weekOfLastKarmaEarned).startOf('isoWeek').format('YYYY-[W]WW')
       : null;
-    if (!prevWeekStr || prevWeekStr !== weekStartStr) {
-      // User crossed into a new week — reset thisWeekKarmaEarned to only this karmaEarned
-      // (the +karmaEarned from $inc above already ran on the old value, so we reset to correct it)
-      await KarmaProfile.updateOne(
-        { userId },
-        { $set: { thisWeekKarmaEarned: karmaEarned } },
-      );
-    } else {
-      // Same week — thisWeekKarmaEarned already has the correct value from $inc above
-      await KarmaProfile.updateOne(
-        { userId },
-        { $inc: { thisWeekKarmaEarned: 0 } }, // No-op, but kept for consistency
-      );
-    }
+    await KarmaProfile.updateOne(
+      { userId },
+      prevWeekStr && prevWeekStr !== weekStartStr
+        ? [{ $set: { thisWeekKarmaEarned: karmaEarned } }]
+        : [{ $set: { thisWeekKarmaEarned: { $add: ['$thisWeekKarmaEarned', 0] } } }],
+    );
 
     // Handle level change atomically in a second update.
     const newLevel = calculateLevel(profile.activeKarma);

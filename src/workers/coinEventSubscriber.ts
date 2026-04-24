@@ -70,12 +70,11 @@ const PROCESSED_EVENT_TTL_SECONDS = 86400;
  */
 async function markEventProcessed(eventId: string): Promise<boolean> {
   const key = `${PROCESSED_EVENTS_PREFIX}${eventId}`;
-  // SETNX + EXPIRE is atomic via the returned value (1 = set, 0 = already exists)
-  const wasNew = await redis.setnx(key, '1');
-  if (wasNew) {
-    await redis.expire(key, PROCESSED_EVENT_TTL_SECONDS);
-  }
-  return !wasNew; // if wasNew=1, we just set it → not duplicate (return false)
+  // FIX: SET NX EX is atomic — single Redis command sets key + TTL together.
+  // Previously used setnx + expire (2 ops); a crash between them left the key
+  // with no TTL, permanently blocking future events with the same ID.
+  const wasNew = await redis.set(key, '1', 'EX', PROCESSED_EVENT_TTL_SECONDS, 'NX');
+  return !wasNew; // 'NX' returns null if key exists → wasNew is null → !null = true (duplicate)
 }
 
 // ── Handler: update karma conversion history ──────────────────────────────────────

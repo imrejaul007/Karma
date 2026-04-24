@@ -83,12 +83,14 @@ export async function emitKarmaAwardedEvent(event: KarmaAwardedEvent): Promise<v
       eventId: event.eventId,
     });
   } catch (err) {
+    // MEDIUM-11 FIX: Fire-and-forget — do not throw. Karma operations must not
+    // fail because the gamification queue is unavailable. Errors are logged and
+    // BullMQ's DLQ captures permanently failed events.
     log.error('[GamificationBridge] Failed to emit karma.awarded event', {
       userId: event.userId,
       eventId: event.eventId,
       error: err instanceof Error ? err.message : String(err),
     });
-    throw err;
   }
 }
 

@@ -474,9 +474,10 @@ export async function processCheckOut(
     let earnRecord: Record<string, unknown> | undefined;
 
     if (status === 'verified') {
-      // Fetch KarmaEvent to get category and duration for profile tracking
+      // Fetch KarmaEvent to get category, difficulty, and duration for profile tracking
       let category: string | undefined;
       let hours: number | undefined;
+      let difficulty: string | undefined;
       try {
         const { KarmaEvent } = await import('../models/index.js');
         const karmaEvent = await KarmaEvent.findOne({
@@ -485,6 +486,7 @@ export async function processCheckOut(
         if (karmaEvent) {
           category = karmaEvent.category as string;
           hours = karmaEvent.expectedDurationHours as number;
+          difficulty = karmaEvent.difficulty as string;
         }
       } catch { /* non-fatal — category tracking is best-effort */ }
 
@@ -500,6 +502,7 @@ export async function processCheckOut(
         csrPoolId: (raw.csrPoolId as string) ?? '',
         category,
         hours,
+        difficulty,
       });
       earnRecord = record as unknown as Record<string, unknown>;
     }

@@ -15,12 +15,15 @@ import { redis } from './config/redis';
 import { port, corsOrigin, rateLimitWindowMs, rateLimitMax } from './config';
 import routes from './routes';
 import karmaRoutes from './routes/karmaRoutes';
+import karmaScoreRoutes from './routes/karmaScoreRoutes';
 import verifyRoutes from './routes/verifyRoutes';
 import batchRoutes from './routes/batchRoutes';
 import eventRoutes from './routes/eventRoutes';
 import walletRoutes from './routes/walletRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
+import { initScoreRankWorker } from './workers/scoreRankWorker';
+import { startDecayWorker } from './workers/decayWorker';
 
 const app = express();
 // Behind Render LB + CF — trust N hops so per-IP rate limiters key on real client IP.
@@ -119,6 +122,7 @@ app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/', routes);
 app.use('/api/karma', karmaRoutes);
+app.use('/api/karma/score', karmaScoreRoutes);
 app.use('/api/karma/verify', verifyRoutes);
 app.use('/api/karma/batch', batchRoutes);
 app.use('/api/karma', eventRoutes);
@@ -159,6 +163,10 @@ async function start() {
   // XS-CRIT-007 FIX: Start the coin event subscriber so the karma service can
   // react to coin credit events from the wallet service and other services.
   await startCoinEventSubscriber();
+
+  // Start background cron workers
+  startDecayWorker();
+  initScoreRankWorker();
 
   const server = app.listen(port, '0.0.0.0', () => {
     logger.info(`[rez-karma-service] HTTP API listening on port ${port}`);

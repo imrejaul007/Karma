@@ -295,6 +295,80 @@ router.post('/admin/event', requireAdmin, async (req: Request, res: Response) =>
 });
 
 // ---------------------------------------------------------------------------
+// PATCH /api/karma/admin/event/:eventId/publish — NGO publishes a draft event
+// ---------------------------------------------------------------------------
+
+router.patch('/admin/event/:eventId/publish', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { eventId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      res.status(400).json({ success: false, message: 'Invalid eventId format' });
+      return;
+    }
+
+    const { KarmaEvent } = await import('../models/index.js');
+    const event = await KarmaEvent.findById(eventId).lean() as Record<string, unknown> | null;
+
+    if (!event) {
+      res.status(404).json({ success: false, message: 'Event not found' });
+      return;
+    }
+
+    if (event.status === 'published' || event.status === 'ongoing') {
+      res.status(409).json({ success: false, message: 'Event is already published' });
+      return;
+    }
+
+    if (event.status !== 'draft') {
+      res.status(409).json({ success: false, message: `Cannot publish event with status: ${event.status}` });
+      return;
+    }
+
+    // Validate required fields are present before publishing
+    const missingFields: string[] = [];
+    if (!event.category) missingFields.push('category');
+    if (!event.difficulty) missingFields.push('difficulty');
+    if (!event.expectedDurationHours) missingFields.push('expectedDurationHours');
+    if (!event.baseKarmaPerHour) missingFields.push('baseKarmaPerHour');
+    if (!event.maxKarmaPerEvent) missingFields.push('maxKarmaPerEvent');
+
+    if (missingFields.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: `Cannot publish: missing required fields: ${missingFields.join(', ')}`,
+      });
+      return;
+    }
+
+    const updated = await KarmaEvent.findByIdAndUpdate(
+      eventId,
+      { $set: { status: 'published' } },
+      { new: true },
+    ).lean() as Record<string, unknown> | null;
+
+    logger.info('[karmaRoutes] KarmaEvent published', { eventId, category: event.category });
+
+    res.json({
+      success: true,
+      message: 'Event published successfully',
+      event: {
+        _id: (updated?._id as mongoose.Types.ObjectId)?.toString(),
+        merchantEventId: (updated?.merchantEventId as mongoose.Types.ObjectId)?.toString(),
+        category: updated?.category,
+        difficulty: updated?.difficulty,
+        status: updated?.status,
+        maxVolunteers: updated?.maxVolunteers,
+        confirmedVolunteers: updated?.confirmedVolunteers,
+      },
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] PATCH /admin/event/:eventId/publish error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to publish event' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // PATCH /api/karma/booking/:bookingId/approve — NGO approves a booking
 // ---------------------------------------------------------------------------
 

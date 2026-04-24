@@ -12,3 +12,12 @@ export type { BatchDocument, IBatch, IAnomalyFlag } from './Batch';
 
 export { CSRPool } from './CSRPool';
 export type { CSRPoolDocument, ICSRPool } from './CSRPool';
+
+export { UserMission } from './KarmaMission';
+export type { IUserMission } from './KarmaMission';
+
+export { Perk } from './Perk';
+export type { IPerk, PerkType } from './Perk';
+
+export { PerkClaim } from './PerkClaim';
+export type { IPerkClaim, PerkClaimStatus } from './PerkClaim';

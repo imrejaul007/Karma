@@ -190,3 +190,73 @@ export interface LevelInfo {
   nextLevelAt: number | null;
   activeKarma: number;
 }
+
+// ─── KarmaScore types ─────────────────────────────────────────────────────────
+
+export interface KarmaScoreComponents {
+  base: number;
+  impact: number;
+  relativeRank: number;
+  trust: number;
+  momentum: number;
+}
+
+export interface KarmaScoreResponse {
+  userId: string;
+  total: number;
+  display: number;
+  raw: number;
+  components: KarmaScoreComponents;
+  band: KarmaScoreBand;
+  bandMeta: BandMetadata;
+  percentile: number;
+  trustGrade: TrustGrade;
+  momentumLabel: MomentumLabel;
+  stability: {
+    raw: number;
+    display: number;
+    lastRawAt: number;
+  } | null;
+}
+
+export interface ScoreHistoryEntry {
+  date: Date;
+  rawScore: number;
+  displayScore: number;
+  band: string;
+  percentile: number;
+  components: KarmaScoreComponents;
+  activeKarma: number;
+  lifetimeKarma: number;
+}
+
+export type KarmaScoreBand = 'starter' | 'active' | 'performer' | 'leader' | 'elite' | 'pinnacle';
+export type TrustGrade = 'D' | 'C' | 'B' | 'A' | 'S';
+export type MomentumLabel = 'cold' | 'slow' | 'steady' | 'hot' | 'blazing';
+
+export interface BandMetadata {
+  label: string;
+  color: string;
+  bgColor: string;
+  minScore: number;
+  maxScore: number;
+  perks: string[];
+}
+
+export interface StreakData {
+  currentStreak: number;
+  longestStreak: number;
+  lastActivityAt: Date | null;
+  streakActive: boolean;
+}
+
+export interface PerkClaim {
+  id: string;
+  perkId: string;
+  perkName: string;
+  status: 'active' | 'used' | 'expired' | 'revoked';
+  claimedAt: Date;
+  expiresAt: Date;
+  redemptionCode?: string;
+  merchantId?: string;
+}

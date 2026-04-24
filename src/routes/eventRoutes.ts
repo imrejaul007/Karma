@@ -5,6 +5,8 @@
  * GET  /api/karma/event/:eventId     — single event detail
  * POST /api/karma/event/join         — join an event
  * DELETE /api/karma/event/:eventId/leave — cancel booking
+ * GET  /api/karma/my-bookings        — user's joined events (upcoming/past)
+ * GET  /api/karma/booking/:eventId  — get user's booking for an event
  */
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
@@ -370,6 +372,176 @@ router.delete('/event/:eventId/leave', requireAuth, async (req: Request, res: Re
   } catch (err) {
     logger.error('[eventRoutes] DELETE /event/:eventId/leave error', { error: err });
     res.status(500).json({ success: false, message: 'Failed to cancel booking' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/booking/:eventId
+// ---------------------------------------------------------------------------
+
+router.get('/booking/:eventId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId ?? '';
+    const { eventId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      res.status(400).json({ success: false, message: 'Invalid eventId' });
+      return;
+    }
+
+    const booking = await EventBookingModel.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+      eventId,
+      status: { $nin: ['cancelled'] },
+    }).lean() as (Record<string, unknown> & { _id: mongoose.Types.ObjectId }) | null;
+
+    if (!booking) {
+      res.json({ success: true, booking: null });
+      return;
+    }
+
+    res.json({
+      success: true,
+      booking: {
+        _id: (booking._id as mongoose.Types.ObjectId).toString(),
+        eventId: (booking.eventId as string).toString(),
+        bookingReference: booking.bookingReference as string,
+        status: booking.status,
+        qrCheckedIn: booking.qrCheckedIn,
+        qrCheckedInAt: booking.qrCheckedInAt,
+        qrCheckedOut: booking.qrCheckedOut,
+        qrCheckedOutAt: booking.qrCheckedOutAt,
+        gpsCheckIn: booking.gpsCheckIn,
+        gpsCheckOut: booking.gpsCheckOut,
+        ngoApproved: booking.ngoApproved,
+        confidenceScore: booking.confidenceScore,
+        verificationStatus: booking.verificationStatus,
+        karmaEarned: booking.karmaEarned,
+        earnedAt: booking.earnedAt,
+        createdAt: (booking as unknown as { createdAt: Date }).createdAt,
+      },
+    });
+  } catch (err) {
+    logger.error('[eventRoutes] GET /booking/:eventId error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch booking' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/my-bookings
+// ---------------------------------------------------------------------------
+
+router.get('/my-bookings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId ?? '';
+    const { status } = req.query;
+
+    const bookingFilter: Record<string, unknown> = {
+      userId: new mongoose.Types.ObjectId(userId),
+      status: { $nin: ['cancelled'] },
+    };
+
+    if (status === 'past') {
+      bookingFilter.qrCheckedOut = true;
+    } else if (status === 'upcoming' || status === 'ongoing') {
+      bookingFilter.qrCheckedOut = { $ne: true };
+    }
+
+    const bookings = await EventBookingModel.find(bookingFilter)
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean() as unknown as (Record<string, unknown> & { _id: mongoose.Types.ObjectId; eventId: mongoose.Types.ObjectId })[];
+
+    if (bookings.length === 0) {
+      res.json({ success: true, bookings: [], total: 0 });
+      return;
+    }
+
+    const eventIds = bookings.map((b) => b.eventId.toString());
+
+    // Fetch karma events for category and karma info
+    const karmaEvents = await KarmaEvent.find({
+      $or: eventIds.flatMap((id) => [
+        { _id: new mongoose.Types.ObjectId(id) } as Record<string, unknown>,
+        { merchantEventId: new mongoose.Types.ObjectId(id) } as Record<string, unknown>,
+      ]),
+    }).lean() as unknown as (Record<string, unknown> & { _id: mongoose.Types.ObjectId; merchantEventId: mongoose.Types.ObjectId })[];
+
+    const eventMap = new Map<string, Record<string, unknown>>();
+    for (const ev of karmaEvents) {
+      eventMap.set(ev._id.toString(), ev);
+      eventMap.set(ev.merchantEventId.toString(), ev);
+    }
+
+    // Enrich with merchant event data if available
+    if (merchantServiceUrl) {
+      try {
+        const { default: axios } = await import('axios');
+        const response = await axios.get<{ events: Record<string, unknown>[] }>(
+          `${merchantServiceUrl}/api/events/batch`,
+          { params: { ids: eventIds.join(',') }, timeout: 3000 },
+        );
+        for (const ev of response.data.events ?? []) {
+          const id = (ev._id as string) || (ev.id as string);
+          const existing = eventMap.get(id);
+          if (existing) {
+            Object.assign(existing, ev);
+          }
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    const enriched = bookings.map((booking) => {
+      const eventId = booking.eventId.toString();
+      const karmaEv = eventMap.get(eventId) ?? {};
+      const qrCheckedIn = booking.qrCheckedIn as boolean;
+      const qrCheckedOut = booking.qrCheckedOut as boolean;
+      let bookingStatus = 'confirmed';
+      if (qrCheckedOut) bookingStatus = 'completed';
+      else if (qrCheckedIn) bookingStatus = 'checked_in';
+
+      return {
+        _id: (booking._id as mongoose.Types.ObjectId).toString(),
+        eventId,
+        bookingReference: booking.bookingReference as string,
+        status: bookingStatus,
+        qrCheckedIn,
+        qrCheckedInAt: booking.qrCheckedInAt,
+        qrCheckedOut,
+        qrCheckedOutAt: booking.qrCheckedOutAt,
+        ngoApproved: booking.ngoApproved as boolean,
+        confidenceScore: booking.confidenceScore as number,
+        verificationStatus: booking.verificationStatus as string,
+        karmaEarned: booking.karmaEarned as number,
+        earnedAt: booking.earnedAt,
+        createdAt: (booking as unknown as { createdAt: Date }).createdAt,
+        event: {
+          _id: eventId,
+          name: karmaEv.name ?? 'Event',
+          description: karmaEv.description ?? '',
+          image: karmaEv.image,
+          date: karmaEv.date ?? karmaEv.startDate,
+          time: karmaEv.time ?? karmaEv.startTime,
+          location: karmaEv.location,
+          organizer: karmaEv.organizer,
+          category: karmaEv.category,
+          difficulty: karmaEv.difficulty,
+          expectedDurationHours: karmaEv.expectedDurationHours,
+          baseKarmaPerHour: karmaEv.baseKarmaPerHour,
+          maxKarmaPerEvent: karmaEv.maxKarmaPerEvent,
+          impactUnit: karmaEv.impactUnit,
+          impactMultiplier: karmaEv.impactMultiplier,
+          maxVolunteers: karmaEv.maxVolunteers,
+          confirmedVolunteers: karmaEv.confirmedVolunteers,
+          status: karmaEv.status,
+        },
+      };
+    });
+
+    res.json({ success: true, bookings: enriched, total: enriched.length });
+  } catch (err) {
+    logger.error('[eventRoutes] GET /my-bookings error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch bookings' });
   }
 });
 

@@ -54,6 +54,14 @@ export interface IKarmaProfile {
   lastDecayAppliedAt?: Date;
   // G-KS-M32 FIX: Store user's timezone for decay calculations.
   userTimezone?: string;
+  // Phase 4: Category-specific event counts for mission/badge tracking
+  environmentEvents: number;
+  foodEvents: number;
+  healthEvents: number;
+  educationEvents: number;
+  communityEvents: number;
+  hardEvents: number;
+  uniqueCategories: string[];
 }
 
 const BadgeSchema = new Schema<IBadge>(
@@ -125,6 +133,14 @@ const KarmaProfileSchema = new Schema<KarmaProfileDocument>(
     lastDecayAppliedAt: { type: Date },
     // G-KS-M32 FIX: Add userTimezone to schema.
     userTimezone: { type: String, default: 'UTC' },
+    // Phase 4: Category-specific event counts for mission/badge tracking
+    environmentEvents: { type: Number, default: 0, min: 0 },
+    foodEvents: { type: Number, default: 0, min: 0 },
+    healthEvents: { type: Number, default: 0, min: 0 },
+    educationEvents: { type: Number, default: 0, min: 0 },
+    communityEvents: { type: Number, default: 0, min: 0 },
+    hardEvents: { type: Number, default: 0, min: 0 },
+    uniqueCategories: { type: [String], default: [] },
   },
   {
     timestamps: { createdAt: false, updatedAt: true },

@@ -23,6 +23,8 @@ export interface CreateEarnRecordParams {
   verificationSignals: VerificationSignals;
   confidenceScore: number;
   csrPoolId?: string;
+  category?: string;
+  hours?: number;
 }
 
 export interface EarnRecordResponse {
@@ -77,6 +79,8 @@ export async function createEarnRecord(
     verificationSignals,
     confidenceScore,
     csrPoolId = '',
+    category,
+    hours,
   } = params;
 
   // G-KS-C7 FIX: Deterministic idempotency key — derived only from bookingId.
@@ -153,7 +157,7 @@ export async function createEarnRecord(
   });
 
   // Update KarmaProfile stats
-  await updateProfileStats(userId, karmaEarned, confidenceScore, level);
+  await updateProfileStats(userId, karmaEarned, confidenceScore, level, category, hours);
 
   return toResponse(record);
 }
@@ -308,11 +312,20 @@ async function updateProfileStats(
   karmaEarned: number,
   confidenceScore: number,
   level: Level,
+  category?: string,
+  hours?: number,
 ): Promise<void> {
   try {
     const now = new Date();
-    const weekStart = moment(now).startOf('isoWeek').toDate();
     const weekStartStr = moment(now).startOf('isoWeek').format('YYYY-[W]WW');
+
+    // Phase 4: Build category increment map
+    const categoryIncrement: Record<string, number> = {};
+    if (category === 'environment') categoryIncrement.environmentEvents = 1;
+    else if (category === 'food') categoryIncrement.foodEvents = 1;
+    else if (category === 'health') categoryIncrement.healthEvents = 1;
+    else if (category === 'education') categoryIncrement.educationEvents = 1;
+    else if (category === 'community') categoryIncrement.communityEvents = 1;
 
     // CRITICAL-005: All karma counters are atomically incremented in a single findOneAndUpdate.
     // Using $inc guarantees atomic server-side increment regardless of concurrent requests.
@@ -325,13 +338,15 @@ async function updateProfileStats(
           eventsCompleted: 1,
           checkIns: 1,
           approvedCheckIns: 1,
+          totalHours: Math.max(0, hours ?? 0),
+          ...categoryIncrement,
         },
         $set: {
           weekOfLastKarmaEarned: now,
           lastActivityAt: now,
         },
+        $addToSet: category ? { uniqueCategories: category } : {},
         $push: {
-          // Keep last 100 activity timestamps
           activityHistory: { $each: [now], $slice: -100 },
         },
       },
@@ -339,8 +354,7 @@ async function updateProfileStats(
     );
 
     if (!profile) {
-      // Auto-create profile on first activity — not a race condition since the caller
-      // already checked for profile existence above this call site.
+      // Auto-create profile on first activity
       const newProfile = new KarmaProfile({
         userId,
         lifetimeKarma: karmaEarned,
@@ -349,9 +363,12 @@ async function updateProfileStats(
         eventsCompleted: 1,
         checkIns: 1,
         approvedCheckIns: 1,
+        totalHours: Math.max(0, hours ?? 0),
         lastActivityAt: now,
         activityHistory: [now],
         avgConfidenceScore: confidenceScore,
+        ...(category ? { uniqueCategories: [category] } : {}),
+        ...(categoryIncrement),
       });
       await newProfile.save();
       return;

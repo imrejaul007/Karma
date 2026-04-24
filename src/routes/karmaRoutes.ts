@@ -3,12 +3,16 @@
  *
  * Base path: /api/karma
  *
- * GET  /api/karma/user/:userId         — get full karma profile
- * GET  /api/karma/user/:userId/history — get conversion history
- * GET  /api/karma/user/:userId/level   — get level + conversion rate info
- * POST /api/karma/decay-all            — trigger decay for all profiles (admin)
+ * GET  /api/karma/user/:userId              — get full karma profile
+ * GET  /api/karma/user/:userId/history      — get conversion history
+ * GET  /api/karma/user/:userId/level        — get level + conversion rate info
+ * POST /api/karma/decay-all                 — trigger decay for all profiles (admin)
+ * POST /api/karma/admin/event               — create a karma event (NGO)
+ * GET  /api/karma/my-bookings              — list user's joined events
+ * PATCH /api/karma/booking/:bookingId/approve — NGO approves a booking
  */
 import { Router, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAdminAuth as requireAdmin } from '../middleware/adminAuth.js';
 import {
@@ -19,6 +23,7 @@ import {
 } from '../services/karmaService.js';
 import { nextLevelThreshold, karmaToNextLevel, getConversionRate } from '../engines/karmaEngine.js';
 import type { Level } from '../types/index.js';
+import { KarmaProfile } from '../models/index.js';
 import { logger } from '../config/logger.js';
 
 const router = Router();
@@ -29,7 +34,9 @@ const router = Router();
  */
 router.get('/user/:userId', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
+    // Resolve 'me' to the authenticated user's ID
+    if (userId === 'me') userId = req.userId ?? '';
     // KARMA-P1 FIX: Verify the authenticated user owns this karma profile.
     // Without this, any authenticated user can read any other user's karma.
     if (req.userId !== userId) {
@@ -88,7 +95,8 @@ router.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      let { userId } = req.params;
+      if (userId === 'me') userId = req.userId ?? '';
       // KARMA-P1 FIX: Verify ownership.
       if (req.userId !== userId) {
         res.status(403).json({ error: 'Access denied: you can only view your own conversion history' });
@@ -116,7 +124,8 @@ router.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      let { userId } = req.params;
+      if (userId === 'me') userId = req.userId ?? '';
       // KARMA-P1 FIX: Verify ownership.
       if (req.userId !== userId) {
         res.status(403).json({ error: 'Access denied: you can only view your own level info' });
@@ -148,6 +157,177 @@ router.post('/decay-all', requireAdmin, async (_req: Request, res: Response) => 
   } catch (err) {
     logger.error('Error running decay job', { error: err });
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/karma/missions
+ * Get active missions with progress for the authenticated user.
+ */
+router.get('/missions', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    const { getActiveMissions } = await import('../services/missionEngine.js');
+    const missions = await getActiveMissions(userId);
+    res.json({ success: true, missions });
+  } catch (err) {
+    logger.error('GET /missions error', { error: err });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/karma/badges
+ * Get all earned badges for the authenticated user.
+ */
+router.get('/badges', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ error: 'Invalid userId' });
+      return;
+    }
+    const profile = await KarmaProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).lean();
+    res.json({ success: true, badges: profile?.badges ?? [] });
+  } catch (err) {
+    logger.error('GET /badges error', { error: err });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/admin/event — NGO creates a karma event
+// ---------------------------------------------------------------------------
+
+router.post('/admin/event', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const {
+      merchantEventId,
+      ngoId,
+      category,
+      impactUnit,
+      impactMultiplier,
+      difficulty,
+      expectedDurationHours,
+      baseKarmaPerHour,
+      maxKarmaPerEvent,
+      gpsRadius,
+      maxVolunteers,
+    } = req.body as Record<string, unknown>;
+
+    // Validate required fields
+    if (!category || !difficulty || !expectedDurationHours || !baseKarmaPerHour || !maxKarmaPerEvent) {
+      res.status(400).json({ success: false, message: 'Missing required fields: category, difficulty, expectedDurationHours, baseKarmaPerHour, maxKarmaPerEvent' });
+      return;
+    }
+
+    const validCategories = ['environment', 'food', 'health', 'education', 'community'];
+    if (!validCategories.includes(category as string)) {
+      res.status(400).json({ success: false, message: `Invalid category. Must be one of: ${validCategories.join(', ')}` });
+      return;
+    }
+
+    const validDifficulties = ['easy', 'medium', 'hard'];
+    if (!validDifficulties.includes(difficulty as string)) {
+      res.status(400).json({ success: false, message: `Invalid difficulty. Must be one of: ${validDifficulties.join(', ')}` });
+      return;
+    }
+
+    // Generate QR codes for this event
+    const { generateEventQRCodes } = await import('../engines/verificationEngine.js');
+    let qrCodes;
+    try {
+      qrCodes = await generateEventQRCodes(merchantEventId as string || new mongoose.Types.ObjectId().toString());
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      logger.error('[karmaRoutes] Failed to generate QR codes', { error: msg });
+      res.status(500).json({ success: false, message: 'Failed to generate QR codes: ' + msg });
+      return;
+    }
+
+    const { KarmaEvent } = await import('../models/index.js');
+    const { randomUUID } = await import('crypto');
+
+    const event = new KarmaEvent({
+      merchantEventId: merchantEventId ? new mongoose.Types.ObjectId(merchantEventId as string) : new mongoose.Types.ObjectId(),
+      ngoId: ngoId ? new mongoose.Types.ObjectId(ngoId as string) : new mongoose.Types.ObjectId(),
+      category: category as string,
+      impactUnit: (impactUnit as string) || 'volunteer_hours',
+      impactMultiplier: typeof impactMultiplier === 'number' ? impactMultiplier : 1.0,
+      difficulty: difficulty as string,
+      expectedDurationHours: Number(expectedDurationHours),
+      baseKarmaPerHour: Number(baseKarmaPerHour),
+      maxKarmaPerEvent: Number(maxKarmaPerEvent),
+      qrCodes,
+      gpsRadius: typeof gpsRadius === 'number' ? gpsRadius : 100,
+      maxVolunteers: typeof maxVolunteers === 'number' ? maxVolunteers : 50,
+      confirmedVolunteers: 0,
+      status: 'draft',
+    });
+
+    await event.save();
+
+    logger.info('[karmaRoutes] KarmaEvent created', { eventId: event._id, category, difficulty });
+
+    res.status(201).json({
+      success: true,
+      event: {
+        _id: (event._id as mongoose.Types.ObjectId).toString(),
+        merchantEventId: (event.merchantEventId as mongoose.Types.ObjectId).toString(),
+        ngoId: (event.ngoId as mongoose.Types.ObjectId).toString(),
+        category: event.category,
+        impactUnit: event.impactUnit,
+        difficulty: event.difficulty,
+        expectedDurationHours: event.expectedDurationHours,
+        baseKarmaPerHour: event.baseKarmaPerHour,
+        maxKarmaPerEvent: event.maxKarmaPerEvent,
+        qrCodes: event.qrCodes,
+        gpsRadius: event.gpsRadius,
+        maxVolunteers: event.maxVolunteers,
+        confirmedVolunteers: 0,
+        status: event.status,
+      },
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /admin/event error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to create event' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/karma/booking/:bookingId/approve — NGO approves a booking
+// ---------------------------------------------------------------------------
+
+router.patch('/booking/:bookingId/approve', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+    const { approved } = req.body as { approved?: boolean };
+
+    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+      res.status(400).json({ success: false, message: 'Invalid bookingId' });
+      return;
+    }
+
+    const { EventBookingModel } = await import('../engines/verificationEngine.js');
+    const booking = await EventBookingModel.findById(bookingId).lean() as Record<string, unknown> | null;
+    if (!booking) {
+      res.status(404).json({ success: false, message: 'Booking not found' });
+      return;
+    }
+
+    await EventBookingModel.findByIdAndUpdate(bookingId, {
+      $set: {
+        ngoApproved: approved !== false,
+        ngoApprovedAt: approved !== false ? new Date() : undefined,
+      },
+    });
+
+    logger.info('[karmaRoutes] Booking approval updated', { bookingId, approved: approved !== false });
+
+    res.json({ success: true, message: approved !== false ? 'Booking approved' : 'Approval revoked' });
+  } catch (err) {
+    logger.error('[karmaRoutes] PATCH /booking/approve error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to update booking approval' });
   }
 });
 

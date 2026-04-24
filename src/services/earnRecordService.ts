@@ -161,6 +161,31 @@ export async function createEarnRecord(
   // Update KarmaProfile stats
   await updateProfileStats(userId, karmaEarned, confidenceScore, level, category, hours, difficulty);
 
+  // Evaluate badges and missions after profile stats are updated
+  // Lazy import to avoid circular dependency
+  try {
+    const { evaluateBadges, evaluateMissions } = await import('./missionEngine.js');
+    const [newBadges, newMissions] = await Promise.allSettled([
+      evaluateBadges(userId),
+      evaluateMissions(userId),
+    ]);
+    if (newBadges.status === 'rejected') {
+      logger.warn('[EarnRecordService] Badge evaluation failed', { error: newBadges.reason });
+    }
+    if (newMissions.status === 'rejected') {
+      logger.warn('[EarnRecordService] Mission evaluation failed', { error: newMissions.reason });
+    }
+    if (newBadges.status === 'fulfilled' && newBadges.value.length > 0) {
+      logger.info('[EarnRecordService] Badges awarded', { userId, badges: newBadges.value });
+    }
+    if (newMissions.status === 'fulfilled' && newMissions.value.length > 0) {
+      logger.info('[EarnRecordService] Missions completed', { userId, missions: newMissions.value });
+    }
+  } catch (err) {
+    // Non-fatal — badge/mission evaluation must not block karma earning
+    logger.warn('[EarnRecordService] Badge/mission evaluation error', { error: err });
+  }
+
   return toResponse(record);
 }
 

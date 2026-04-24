@@ -25,6 +25,7 @@ export interface CreateEarnRecordParams {
   csrPoolId?: string;
   category?: string;
   hours?: number;
+  difficulty?: string;
 }
 
 export interface EarnRecordResponse {
@@ -81,6 +82,7 @@ export async function createEarnRecord(
     csrPoolId = '',
     category,
     hours,
+    difficulty,
   } = params;
 
   // G-KS-C7 FIX: Deterministic idempotency key — derived only from bookingId.
@@ -157,7 +159,7 @@ export async function createEarnRecord(
   });
 
   // Update KarmaProfile stats
-  await updateProfileStats(userId, karmaEarned, confidenceScore, level, category, hours);
+  await updateProfileStats(userId, karmaEarned, confidenceScore, level, category, hours, difficulty);
 
   return toResponse(record);
 }
@@ -314,6 +316,7 @@ async function updateProfileStats(
   level: Level,
   category?: string,
   hours?: number,
+  difficulty?: string,
 ): Promise<void> {
   try {
     const now = new Date();
@@ -326,6 +329,10 @@ async function updateProfileStats(
     else if (category === 'health') categoryIncrement.healthEvents = 1;
     else if (category === 'education') categoryIncrement.educationEvents = 1;
     else if (category === 'community') categoryIncrement.communityEvents = 1;
+
+    // Phase 4: Increment hardEvents if this was a hard-difficulty event
+    const hardEventIncrement: Record<string, number> = {};
+    if (difficulty === 'hard') hardEventIncrement.hardEvents = 1;
 
     // CRITICAL-005: All karma counters are atomically incremented in a single findOneAndUpdate.
     // Using $inc guarantees atomic server-side increment regardless of concurrent requests.
@@ -340,6 +347,7 @@ async function updateProfileStats(
           approvedCheckIns: 1,
           totalHours: Math.max(0, hours ?? 0),
           ...categoryIncrement,
+          ...hardEventIncrement,
         },
         $set: {
           weekOfLastKarmaEarned: now,
@@ -369,6 +377,7 @@ async function updateProfileStats(
         avgConfidenceScore: confidenceScore,
         ...(category ? { uniqueCategories: [category] } : {}),
         ...(categoryIncrement),
+        ...(difficulty === 'hard' ? { hardEvents: 1 } : {}),
       });
       await newProfile.save();
       return;

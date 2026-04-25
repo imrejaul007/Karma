@@ -156,9 +156,11 @@ CauseCommunitySchema.methods.addPost = async function (
 };
 
 // Indexes
-CauseCommunitySchema.index({ slug: 1 }, { unique: true });
-CauseCommunitySchema.index({ category: 1 });
-CauseCommunitySchema.index({ followerIds: 1 });
+// Note: slug has unique:true in field definition (line 55) — unique creates the index
+// Note: category has index:true in field definition (line 68)
+// Note: followerIds has index:true in field definition (line 87)
+// REMOVED duplicate index on slug: the unique:true field option already creates it
+// Adding schema.index({ slug: 1 }, { unique: true }) caused duplicate index warnings
 
 export const CauseCommunity: Model<CauseCommunityDocument> =
   mongoose.models.CauseCommunity ||

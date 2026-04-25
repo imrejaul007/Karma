@@ -7,6 +7,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import { walletServiceUrl } from '../config/index.js';
 import { createServiceLogger } from '../config/logger.js';
+import { withRetry } from '../utils/retry.js';
 
 const log = createServiceLogger('walletIntegration');
 
@@ -81,19 +82,23 @@ export async function creditUserWallet(params: WalletCreditParams): Promise<Wall
 
   try {
     const client = getWalletClient();
-    const response = await client.post<{ success: boolean; balance: number; transactionId: string }>(
-      // G-KS-C9 FIX: Use internal endpoint /internal/credit, not /api/wallet/credit.
-      '/internal/credit',
-      {
-        userId,
-        amount,
-        coinType,
-        source,
-        description,
-        idempotencyKey,
-        referenceModel,
-        sourceId: referenceId,
-      },
+    const response = await withRetry(
+      () =>
+        client.post<{ success: boolean; balance: number; transactionId: string }>(
+          // G-KS-C9 FIX: Use internal endpoint /internal/credit, not /api/wallet/credit.
+          '/internal/credit',
+          {
+            userId,
+            amount,
+            coinType,
+            source,
+            description,
+            idempotencyKey,
+            referenceModel,
+            sourceId: referenceId,
+          },
+        ),
+      { retries: 1, delayMs: 500 },
     );
 
     if (response.data.success) {
@@ -150,9 +155,13 @@ export async function getKarmaBalance(userId: string): Promise<number> {
   const client = getWalletClient();
   // CS-HIGH-03 FIX: Include userId so wallet returns the correct user's balance.
   // CROSS-PRODUCT-FIX-1: Use canonical 'rez' coin type (not legacy 'karma_points').
-  const response = await client.get<{ balance?: { available?: number }; coins?: Array<{ type: string; amount: number }> }>(
-    '/internal/balance',
-    { params: { coinType: 'rez', userId } },
+  const response = await withRetry(
+    () =>
+      client.get<{ balance?: { available?: number }; coins?: Array<{ type: string; amount: number }> }>(
+        '/internal/balance',
+        { params: { coinType: 'rez', userId } },
+      ),
+    { retries: 1, delayMs: 500 },
   );
 
   // Try 'rez' sub-entry first (canonical coin type for karma-converted coins)

@@ -10,7 +10,7 @@
  * - Earn history: recent events with karma earned
  */
 import PDFDocument from 'pdfkit';
-import type { Level } from '../types/index.js';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 import { KarmaProfile } from '../models/KarmaProfile.js';
 import { EarnRecord } from '../models/EarnRecord.js';
 import { computeKarmaScore, getBandMetadata } from '../engines/karmaScoreEngine.js';

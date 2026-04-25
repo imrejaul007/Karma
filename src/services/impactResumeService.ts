@@ -20,7 +20,7 @@ import { KarmaProfile, EarnRecord } from '../models/index.js';
 import { computeKarmaScore, getBandMetadata } from '../engines/karmaScoreEngine.js';
 import { getConversionRate } from '../engines/karmaEngine.js';
 import { logger } from '../config/logger.js';
-import type { Level } from '../types/index.js';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 
 // ---------------------------------------------------------------------------
 // Types

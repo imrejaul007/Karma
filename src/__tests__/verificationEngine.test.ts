@@ -11,14 +11,14 @@ import {
   calculateConfidenceScore,
   checkGPSProximity,
 } from '../engines/verificationEngine.js';
-import type { VerificationSignals } from '../types/index.js';
+import type { IVerificationSignals as VerificationSignals } from '@rez/shared-types';
 
 // getApprovalStatus is tested as a pure function
 import { getApprovalStatus } from '../engines/verificationEngine.js';
 
 // Re-export for convenience in tests
 import { getConversionRate } from '../engines/karmaEngine.js';
-import type { Level } from '../types/index.js';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 
 // ---------------------------------------------------------------------------
 // calculateConfidenceScore tests

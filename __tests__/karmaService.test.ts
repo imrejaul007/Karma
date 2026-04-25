@@ -98,7 +98,7 @@ describe('karmaEngine', () => {
       };
 
       // 50 * 4 hours * 1.2 impact * 1.0 difficulty = 240
-      expect(calculateKarmaEarned(event, 4)).toBe(240);
+      expect(calculateKarmaEarned(event as unknown as import('@rez/shared-types').IKarmaEvent, 4)).toBe(240);
     });
 
     it('applies medium difficulty multiplier (1.5x)', () => {
@@ -121,7 +121,7 @@ describe('karmaEngine', () => {
       };
 
       // 55 * 2 * 1.3 * 1.5 = 214.5 → floor → 214
-      expect(calculateKarmaEarned(event, 2)).toBe(214);
+      expect(calculateKarmaEarned(event as unknown as import('@rez/shared-types').IKarmaEvent, 2)).toBe(214);
     });
 
     it('applies hard difficulty multiplier (2.0x)', () => {
@@ -144,7 +144,7 @@ describe('karmaEngine', () => {
       };
 
       // 70 * 1 * 1.5 * 2.0 = 210
-      expect(calculateKarmaEarned(event, 1)).toBe(210);
+      expect(calculateKarmaEarned(event as unknown as import('@rez/shared-types').IKarmaEvent, 1)).toBe(210);
     });
 
     it('caps karma at maxKarmaPerEvent', () => {
@@ -167,7 +167,7 @@ describe('karmaEngine', () => {
       };
 
       // 50 * 10 * 1.2 * 1.0 = 600 → capped at 200
-      expect(calculateKarmaEarned(event, 10)).toBe(200);
+      expect(calculateKarmaEarned(event as unknown as import('@rez/shared-types').IKarmaEvent, 10)).toBe(200);
     });
 
     it('handles zero hours', () => {
@@ -189,7 +189,7 @@ describe('karmaEngine', () => {
         status: 'published' as const,
       };
 
-      expect(calculateKarmaEarned(event, 0)).toBe(0);
+      expect(calculateKarmaEarned(event as unknown as import('@rez/shared-types').IKarmaEvent, 0)).toBe(0);
     });
   });
 

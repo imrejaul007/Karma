@@ -28,7 +28,7 @@ import { generateImpactReportPDF } from '../services/reportService.js';
 import { generateImpactResume } from '../services/impactResumeService.js';
 import { generateImpactResumePDF } from '../templates/resumeTemplate.js';
 import { nextLevelThreshold, karmaToNextLevel, getConversionRate } from '../engines/karmaEngine.js';
-import type { Level } from '../types/index.js';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 import { KarmaProfile, CorporatePartner, CsrAllocation } from '../models/index.js';
 import {
   getCorporateDashboard,
@@ -80,7 +80,7 @@ router.get('/user/:userId', requireAuth, async (req: Request, res: Response) => 
       return;
     }
 
-    const level = (profile.level ?? 'L1') as import('../types/index.js').Level;
+    const level = (profile.level ?? 'L1') as Level;
     const nextAt = nextLevelThreshold(level);
     const toNext = karmaToNextLevel(profile.activeKarma);
 
@@ -363,9 +363,12 @@ router.post('/admin/event', requireAdmin, async (req: Request, res: Response) =>
     try {
       qrCodes = await generateEventQRCodes(merchantEventId as string || new mongoose.Types.ObjectId().toString());
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      logger.error('[karmaRoutes] Failed to generate QR codes', { error: msg });
-      res.status(500).json({ success: false, message: 'Failed to generate QR codes: ' + msg });
+      logger.error('[karmaRoutes] Failed to generate QR codes', {
+        path: req.path,
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      res.status(500).json({ success: false, message: 'Failed to generate QR codes' });
       return;
     }
 
@@ -676,13 +679,17 @@ router.post('/communities/:slug/follow', requireAuth, async (req: Request, res: 
     await followCommunity(userId, slug);
     res.json({ success: true });
   } catch (err) {
-    logger.error('[karmaRoutes] POST /communities/:slug/follow error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to follow community';
-    if (message === 'Community not found') {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] POST /communities/:slug/follow error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage === 'Community not found') {
+      res.status(404).json({ success: false, message: 'Community not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -697,13 +704,17 @@ router.delete('/communities/:slug/follow', requireAuth, async (req: Request, res
     await unfollowCommunity(userId, slug);
     res.json({ success: true });
   } catch (err) {
-    logger.error('[karmaRoutes] DELETE /communities/:slug/follow error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to unfollow community';
-    if (message === 'Community not found') {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] DELETE /communities/:slug/follow error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage === 'Community not found') {
+      res.status(404).json({ success: false, message: 'Community not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -740,13 +751,17 @@ router.post('/communities/:slug/posts', requireAuth, async (req: Request, res: R
     const post = await createPost(slug, userId, 'volunteer', content, mediaUrls);
     res.status(201).json(post);
   } catch (err) {
-    logger.error('[karmaRoutes] POST /communities/:slug/posts error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to create post';
-    if (message === 'Community not found') {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] POST /communities/:slug/posts error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage === 'Community not found') {
+      res.status(404).json({ success: false, message: 'Community not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -804,13 +819,17 @@ router.get('/csr/dashboard', requireAdmin, async (req: Request, res: Response) =
     const dashboard = await getCorporateDashboard(partnerId);
     res.json(dashboard);
   } catch (err) {
-    logger.error('[karmaRoutes] GET /csr/dashboard error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to fetch dashboard';
-    if (message.includes('not found')) {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] GET /csr/dashboard error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage.includes('not found')) {
+      res.status(404).json({ success: false, message: 'Dashboard not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -840,17 +859,21 @@ router.post('/csr/allocate', requireAdmin, async (req: Request, res: Response) =
     await allocateKarmaCredits(partnerId, recipientUserId, amount, eventId);
     res.json({ success: true });
   } catch (err) {
-    logger.error('[karmaRoutes] POST /csr/allocate error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to allocate karma credits';
-    if (message.includes('not found') || message.includes('Invalid')) {
-      res.status(400).json({ success: false, message });
+    logger.error('[karmaRoutes] POST /csr/allocate error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage.includes('not found') || errorMessage.includes('Invalid')) {
+      res.status(400).json({ success: false, message: 'Invalid request parameters' });
       return;
     }
-    if (message.includes('Insufficient')) {
-      res.status(400).json({ success: false, message });
+    if (errorMessage.includes('Insufficient')) {
+      res.status(400).json({ success: false, message: 'Insufficient karma credits' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -903,13 +926,17 @@ router.post('/csr/partner', requireAdmin, async (req: Request, res: Response) =>
 
     res.status(201).json({ success: true, partner });
   } catch (err) {
-    logger.error('[karmaRoutes] POST /csr/partner error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to create corporate partner';
-    if (message.includes('duplicate') || message.includes('E11000')) {
+    logger.error('[karmaRoutes] POST /csr/partner error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage.includes('duplicate') || errorMessage.includes('E11000')) {
       res.status(409).json({ success: false, message: 'A partner with this company name already exists' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -958,13 +985,17 @@ router.get('/csr/report/:partnerId', requireAdmin, async (req: Request, res: Res
     const report = await generateCsrReport(partnerId, year, quarter);
     res.json(report);
   } catch (err) {
-    logger.error('[karmaRoutes] GET /csr/report error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to generate CSR report';
-    if (message.includes('not found')) {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] GET /csr/report error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage.includes('not found')) {
+      res.status(404).json({ success: false, message: 'Report not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -990,13 +1021,17 @@ router.post('/csr/partner/:partnerId/employee', requireAdmin, async (req: Reques
     await addEmployeeToProgram(partnerId, employeeUserId);
     res.json({ success: true });
   } catch (err) {
-    logger.error('[karmaRoutes] POST /csr/partner/employee error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to add employee';
-    if (message.includes('not found')) {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] POST /csr/partner/employee error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage.includes('not found')) {
+      res.status(404).json({ success: false, message: 'Employee or partner not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 
@@ -1016,13 +1051,17 @@ router.get('/csr/partner/:partnerId/employee/:employeeUserId', requireAdmin, asy
     const stats = await getEmployeeStats(partnerId, employeeUserId);
     res.json(stats);
   } catch (err) {
-    logger.error('[karmaRoutes] GET /csr/partner/employee/stats error', { error: err });
-    const message = err instanceof Error ? err.message : 'Failed to fetch employee stats';
-    if (message.includes('not found')) {
-      res.status(404).json({ success: false, message });
+    logger.error('[karmaRoutes] GET /csr/partner/employee/stats error', {
+      path: req.path,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    const errorMessage = err instanceof Error ? err.message : '';
+    if (errorMessage.includes('not found')) {
+      res.status(404).json({ success: false, message: 'Employee not found' });
       return;
     }
-    res.status(500).json({ success: false, message });
+    res.status(500).json({ success: false, message: 'An internal error occurred' });
   }
 });
 

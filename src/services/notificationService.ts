@@ -4,6 +4,7 @@
  * Uses FCM (Firebase Cloud Messaging) to send push notifications to users.
  * Notifications are fire-and-forget — failures never block the parent operation.
  */
+import axios from 'axios';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger.js';
 import { KarmaProfile } from '../models/KarmaProfile.js';
@@ -94,23 +95,53 @@ const NOTIFICATION_TEMPLATES: Record<NotificationEvent['type'], NotificationTemp
   },
 };
 
-// ── FCM Sending (Mock) ───────────────────────────────────────────────────────
+// ── FCM Sending ─────────────────────────────────────────────────────────────
+
+const FCM_API_URL = 'https://fcm.googleapis.com/fcm/send';
 
 /**
- * Send a push notification via FCM.
- * Currently a mock implementation — logs the notification.
- * In production: use firebase-admin SDK.
+ * Send a push notification via Firebase Cloud Messaging HTTP API.
  */
 async function sendPushNotification(payload: PushNotificationPayload): Promise<boolean> {
-  // In production: use firebase-admin SDK
-  // import admin from 'firebase-admin';
-  // await admin.messaging().send({ token: payload.token, notification: { title, body }, data: payload.data });
-  logger.info('[PushNotification] Sending notification', {
-    token: payload.token.slice(0, 10) + '...',
-    title: payload.title,
-    body: payload.body,
-  });
-  return true;
+  // If no FCM server key configured, log and return
+  if (!process.env.FCM_SERVER_KEY) {
+    logger.warn('[PushNotification] FCM_SERVER_KEY not configured — skipping push', {
+      token: payload.token.slice(0, 10) + '...',
+    });
+    return false;
+  }
+
+  try {
+    const response = await axios.post(
+      FCM_API_URL,
+      {
+        to: payload.token,
+        notification: { title: payload.title, body: payload.body },
+        data: payload.data || {},
+        priority: 'high',
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `key=${process.env.FCM_SERVER_KEY}`,
+        },
+        timeout: 10000,
+      },
+    );
+
+    logger.info('[PushNotification] FCM response', {
+      success: response.data.success === 1,
+      messageId: response.data.results?.[0]?.message_id,
+    });
+
+    return response.data.success === 1;
+  } catch (error: any) {
+    logger.error('[PushNotification] FCM send failed', {
+      token: payload.token.slice(0, 10) + '...',
+      error: error?.response?.data || error?.message,
+    });
+    return false;
+  }
 }
 
 // ── Token Lookup ──────────────────────────────────────────────────────────────

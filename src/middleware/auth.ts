@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
+import crypto from 'crypto';
 import { authServiceUrl } from '../config';
+import { redis } from '../config/redis';
 
 declare global {
   namespace Express {
@@ -40,17 +42,10 @@ export async function requireAuth(
   const token = authHeader.slice(7);
 
   try {
-    const response = await axios.get<AuthPayload>(
-      `${authServiceUrl}/api/user/auth/validate`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 5000,
-      },
-    );
+    const payload = await validateTokenWithCache(token);
 
     // G-KS-C2 FIX: Validate response shape before trusting.
     // Reject if valid is false, userId is missing/not a string/empty, or role is missing.
-    const payload = response.data;
     if (
       !payload ||
       payload.valid !== true ||
@@ -77,4 +72,58 @@ export async function requireAuth(
       message: 'Authentication service unavailable',
     });
   }
+}
+
+/**
+ * Cache key prefix for auth token validation results.
+ */
+const AUTH_CACHE_PREFIX = 'auth:token:';
+
+/**
+ * Cache TTL in seconds (1 minute).
+ */
+const AUTH_CACHE_TTL = 60;
+
+/**
+ * Validates a token against the auth service with Redis caching.
+ * Results are cached for 60 seconds to reduce load on the auth service.
+ *
+ * @param token - The bearer token to validate
+ * @returns The auth payload from the auth service
+ */
+async function validateTokenWithCache(token: string): Promise<AuthPayload | null> {
+  // Create a SHA-256 hash of the token for the cache key (don't store raw tokens)
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const cacheKey = `${AUTH_CACHE_PREFIX}${tokenHash}`;
+
+  try {
+    // Check Redis cache first
+    const cached = await redis.get(cacheKey);
+    if (cached !== null) {
+      // Cached result exists - return it without calling auth service
+      if (cached === 'null') return null;
+      return JSON.parse(cached) as AuthPayload;
+    }
+  } catch {
+    // Redis error - proceed without cache (fall through to auth service call)
+  }
+
+  // Cache miss or Redis error - call auth service
+  const response = await axios.get<AuthPayload>(
+    `${authServiceUrl}/api/user/auth/validate`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000,
+    },
+  );
+
+  try {
+    // Cache the result with 60-second TTL
+    const cacheValue = response.data === null ? 'null' : JSON.stringify(response.data);
+    await redis.setex(cacheKey, AUTH_CACHE_TTL, cacheValue);
+  } catch {
+    // Redis error - proceed without caching
+  }
+
+  return response.data;
 }

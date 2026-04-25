@@ -8,11 +8,62 @@
  * - Employee program management
  */
 import mongoose from 'mongoose';
-import moment from 'moment';
 import { CorporatePartner, CsrAllocation, KarmaProfile, KarmaEvent, EarnRecord } from '../models/index.js';
 import type { CorporatePartnerDocument } from '../models/CorporatePartner.js';
 import type { CsrAllocationDocument } from '../models/CsrAllocation.js';
 import { logger } from '../config/logger.js';
+
+// ---------------------------------------------------------------------------
+// Date Helper Functions (replaces moment.js)
+// ---------------------------------------------------------------------------
+
+function getStartOfYear(date: Date = new Date()): Date {
+  return new Date(date.getFullYear(), 0, 1, 0, 0, 0, 0);
+}
+
+function getMonthStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+}
+
+function getMonthEnd(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function formatDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthName(month: number): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return months[month];
+}
+
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
+function subtractDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() - days);
+  return result;
+}
+
+function getQuarterStart(year: number, quarter: number): Date {
+  // Quarter 1 = Jan 1, Quarter 2 = Apr 1, Quarter 3 = Jul 1, Quarter 4 = Oct 1
+  const startMonth = (quarter - 1) * 3;
+  return new Date(year, startMonth, 1, 0, 0, 0, 0);
+}
+
+function getQuarterEnd(year: number, quarter: number): Date {
+  // End is the last day of the last month of the quarter
+  const lastMonthOfQuarter = quarter * 3; // 3, 6, 9, or 12
+  return new Date(year, lastMonthOfQuarter, 0, 23, 59, 59, 999);
+}
 
 // ---------------------------------------------------------------------------
 // Type Definitions
@@ -138,7 +189,7 @@ export async function getCorporateDashboard(partnerId: string): Promise<Corporat
   }
 
   // Calculate YTD stats
-  const startOfYear = moment().startOf('year').toDate();
+  const startOfYear = getStartOfYear();
   const now = new Date();
 
   // Get events sponsored by this partner
@@ -198,8 +249,9 @@ export async function getCorporateDashboard(partnerId: string): Promise<Corporat
   // Calculate monthly trend
   const monthlyTrend: MonthlyTrend[] = [];
   for (let month = 0; month < 12; month++) {
-    const monthStart = moment().month(month).startOf('month').toDate();
-    const monthEnd = moment().month(month).endOf('month').toDate();
+    const tempDate = new Date(now.getFullYear(), month, 1);
+    const monthStart = getMonthStart(tempDate);
+    const monthEnd = getMonthEnd(tempDate);
 
     if (monthStart > now) break;
 
@@ -224,7 +276,7 @@ export async function getCorporateDashboard(partnerId: string): Promise<Corporat
     ]);
 
     monthlyTrend.push({
-      month: moment().month(month).format('MMM'),
+      month: getMonthName(month),
       events: monthEvents,
       volunteers: monthVolunteers[0]?.count || 0,
     });
@@ -340,7 +392,7 @@ async function buildRecentActivity(
 
     recentActivity.push({
       eventName: `${event.category} Event`,
-      date: moment(event.updatedAt).format('YYYY-MM-DD'),
+      date: formatDate(event.updatedAt),
       volunteers: earnRecords[0]?.volunteerCount || 0,
       karma: earnRecords[0]?.totalKarma || 0,
     });
@@ -375,8 +427,8 @@ export async function generateCsrReport(
   }
 
   // Calculate period boundaries
-  const periodStart = moment(`${year}-${(quarter - 1) * 3 + 1}-01`).startOf('month').toDate();
-  const periodEnd = moment(periodStart).add(3, 'months').subtract(1, 'day').endOf('month').toDate();
+  const periodStart = getQuarterStart(year, quarter);
+  const periodEnd = getQuarterEnd(year, quarter);
 
   const sponsoredEventIds = partner.sponsoredEvents || [];
 
@@ -531,7 +583,7 @@ export async function generateCsrReport(
 
     eventList.push({
       name: `${event.category.charAt(0).toUpperCase() + event.category.slice(1)} Event`,
-      date: moment(event.updatedAt).format('YYYY-MM-DD'),
+      date: formatDate(event.updatedAt),
       category: event.category,
       volunteers: eventEarnRecords[0]?.volunteerCount || 0,
       karma: eventEarnRecords[0]?.totalKarma || 0,
@@ -541,8 +593,8 @@ export async function generateCsrReport(
   return {
     companyName: partner.companyName,
     period: {
-      start: moment(periodStart).format('YYYY-MM-DD'),
-      end: moment(periodEnd).format('YYYY-MM-DD'),
+      start: formatDate(periodStart),
+      end: formatDate(periodEnd),
     },
     executiveSummary: {
       totalVolunteers,
@@ -735,7 +787,7 @@ export async function getEmployeeStats(
   });
 
   // Calculate participation rate
-  const startOfYear = moment().startOf('year').toDate();
+  const startOfYear = getStartOfYear();
   const employeeEvents = await EarnRecord.countDocuments({
     userId: employeeObjectId,
     eventId: { $in: partner.sponsoredEvents },
@@ -772,7 +824,7 @@ export async function updatePartnerStats(partnerId: string): Promise<void> {
   }
 
   const sponsoredEventIds = partner.sponsoredEvents;
-  const startOfYear = moment().startOf('year').toDate();
+  const startOfYear = getStartOfYear();
 
   // Aggregate stats from earn records
   const statsAggregation = await EarnRecord.aggregate([

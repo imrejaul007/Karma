@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { Level } from '../types/index';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 
 export interface KarmaProfileDocument extends Omit<IKarmaProfile, '_id'>, Document {
   _id: mongoose.Types.ObjectId;

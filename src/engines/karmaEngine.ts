@@ -6,12 +6,12 @@
  */
 import moment from 'moment';
 import type {
-  Level,
-  ConversionRate,
-  KarmaEvent,
-  KarmaProfile,
+  KarmaLevel as Level,
+  KarmaConversionRate as ConversionRate,
+  IKarmaEvent,
+  IKarmaProfile,
   KarmaProfileDelta,
-} from '../types/index.js';
+} from '@rez/shared-types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -152,7 +152,7 @@ export function convertKarmaToCoins(karma: number, level: Level): number {
  * - Validates baseKarmaPerHour > 0
  * - Validates maxKarmaPerEvent > 0
  */
-export function calculateKarmaEarned(event: KarmaEvent, hours: number): number {
+export function calculateKarmaEarned(event: IKarmaEvent, hours: number): number {
   if (event.baseKarmaPerHour <= 0) {
     throw new Error(
       `Invalid baseKarmaPerHour: ${event.baseKarmaPerHour} (must be positive)`
@@ -219,7 +219,7 @@ function daysBetween(from: Date | null, to: Date, userTimezone?: string): number
  * BE-KAR-001 FIX: Check lastDecayAppliedAt to prevent double-decay on the same day.
  * BE-KAR-009 FIX: This function should be wrapped with a distributed lock by the caller.
  */
-export function applyDailyDecay(profile: KarmaProfile, userTimezone?: string): KarmaProfileDelta {
+export function applyDailyDecay(profile: IKarmaProfile, userTimezone?: string): KarmaProfileDelta {
   // Skip decay if user has no activity yet (lastActivityAt is null)
   if (!profile.lastActivityAt) {
     return { activeKarmaChange: 0, levelChange: false };
@@ -290,7 +290,7 @@ export function applyDailyDecay(profile: KarmaProfile, userTimezone?: string): K
  *
  * BE-KAR-004 FIX: Clamp result to [0, 100] and handle division by zero.
  */
-export function calculateTrustScore(profile: KarmaProfile): number {
+export function calculateTrustScore(profile: IKarmaProfile): number {
   const completionRate =
     profile.eventsJoined > 0
       ? profile.eventsCompleted / profile.eventsJoined

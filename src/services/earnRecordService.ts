@@ -10,6 +10,7 @@ import { KarmaProfile, KarmaProfileDocument } from '../models/KarmaProfile.js';
 import { logger } from '../config/logger.js';
 import { getConversionRate, calculateLevel } from '../engines/karmaEngine.js';
 import type { VerificationSignals, EarnRecordStatus, Level } from '../types/index.js';
+import { notifyKarmaReceived } from './notificationService.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -185,6 +186,11 @@ export async function createEarnRecord(
     // Non-fatal — badge/mission evaluation must not block karma earning
     logger.warn('[EarnRecordService] Badge/mission evaluation error', { error: err });
   }
+
+  // Send karma received notification (fire-and-forget)
+  notifyKarmaReceived(userId, karmaEarned).catch((err) => {
+    logger.warn('[EarnRecordService] Karma notification failed', { userId, karmaEarned, error: err });
+  });
 
   return toResponse(record);
 }

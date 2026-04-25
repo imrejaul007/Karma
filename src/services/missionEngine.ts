@@ -7,6 +7,11 @@
 import mongoose from 'mongoose';
 import { KarmaProfile } from '../models/KarmaProfile.js';
 import { logger } from '../config/logger.js';
+import {
+  sendKarmaNotification,
+  notifyBadgeEarned,
+  notifyMissionComplete,
+} from './notificationService.js';
 
 // ── Badge Definitions ───────────────────────────────────────────────────────
 
@@ -157,6 +162,11 @@ export async function evaluateBadges(userId: string): Promise<string[]> {
         newlyEarned.push(badgeId);
         logger.info('[MissionEngine] Badge awarded', { userId, badgeId });
 
+        // Send push notification for badge earned
+        notifyBadgeEarned(userId, badgeId, def.name, def.icon).catch((err) => {
+          logger.warn('[MissionEngine] Badge notification failed', { userId, badgeId, error: err });
+        });
+
         if (def.karmaBonus && def.karmaBonus > 0) {
           const { addKarma } = await import('./karmaService.js');
           await addKarma(userId, def.karmaBonus).catch(() => {});
@@ -251,6 +261,11 @@ export async function evaluateMissions(userId: string): Promise<string[]> {
         await addKarma(userId, mission.reward.karmaBonus).catch(() => {});
         newlyCompleted.push(mission.missionId);
         logger.info('[MissionEngine] Mission completed', { userId, missionId: mission.missionId });
+
+        // Send push notification for mission completion
+        notifyMissionComplete(userId, mission.missionId, mission.name).catch((err) => {
+          logger.warn('[MissionEngine] Mission notification failed', { userId, missionId: mission.missionId, error: err });
+        });
       } catch { /* non-fatal */ }
     }
   }

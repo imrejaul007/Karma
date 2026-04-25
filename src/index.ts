@@ -21,6 +21,7 @@ import batchRoutes from './routes/batchRoutes';
 import eventRoutes from './routes/eventRoutes';
 import walletRoutes from './routes/walletRoutes';
 import bookingRoutes from './routes/bookingRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
 import { initScoreRankWorker } from './workers/scoreRankWorker';
 import { startDecayWorker } from './workers/decayWorker';
@@ -129,6 +130,7 @@ app.use('/api/karma/batch', batchRoutes);
 app.use('/api/karma', eventRoutes);
 app.use('/api/karma', walletRoutes);
 app.use('/api/karma', bookingRoutes);
+app.use('/api/karma', notificationRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────────────────
 

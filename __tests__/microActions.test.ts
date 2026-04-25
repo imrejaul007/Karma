@@ -85,18 +85,27 @@ describe('getDailyActionKey', () => {
 
     expect(result).toMatch(/^daily_checkin_\d{4}-\d{2}-\d{2}$/);
 
+    // Use local date (YYYY-MM-DD) to match getDailyActionKey's local timezone usage
     const today = new Date();
-    const expectedDate = today.toISOString().split('T')[0];
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const expectedDate = `${yyyy}-${mm}-${dd}`;
     expect(result).toBe(`daily_checkin_${expectedDate}`);
   });
 
   it('works with different base action keys', () => {
     const keys = ['share_impact', 'refer_friend', 'complete_profile', 'streak_7'];
-    const today = new Date().toISOString().split('T')[0];
+    // Use local date (YYYY-MM-DD) to match getDailyActionKey's local timezone usage
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const localDate = `${yyyy}-${mm}-${dd}`;
 
     keys.forEach((key) => {
       const result = getDailyActionKey(key);
-      expect(result).toBe(`${key}_${today}`);
+      expect(result).toBe(`${key}_${localDate}`);
     });
   });
 });

@@ -23,6 +23,7 @@ import walletRoutes from './routes/walletRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
+import { closeGamificationBridge } from './utils/gamificationBridge.js';
 import { initScoreRankWorker } from './workers/scoreRankWorker';
 import { startDecayWorker } from './workers/decayWorker';
 import { seedCommunities } from './config/communitySeed.js';
@@ -196,6 +197,14 @@ async function start() {
 
       // XS-CRIT-007 FIX: Stop coin event subscriber before closing Redis connections
       await stopCoinEventSubscriber().catch(() => {});
+
+      // HIGH-SEV FIX: Close BullMQ gamification queue before Redis connections
+      try {
+        await closeGamificationBridge();
+        logger.info('[SHUTDOWN] Gamification bridge closed');
+      } catch (e) {
+        logger.error('[SHUTDOWN] Error closing gamification bridge', { error: e });
+      }
 
       await redis.quit().catch(() => {});
       await bullmqRedis.quit().catch(() => {});

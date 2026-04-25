@@ -14,7 +14,7 @@ import { KarmaProfile } from '../models/index.js';
 import { getDailyActionKey, MICRO_ACTIONS_REGISTRY } from '../services/microActionService.js';
 import { logger } from '../config/logger.js';
 import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
-import type { Level } from '../types/index.js';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 
 // ---------------------------------------------------------------------------
 // Types

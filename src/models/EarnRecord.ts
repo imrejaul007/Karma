@@ -1,9 +1,9 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import type {
   EarnRecordStatus,
-  Level,
-  VerificationSignals,
-} from '../types/index';
+  KarmaLevel as Level,
+  IVerificationSignals as VerificationSignals,
+} from '@rez/shared-types';
 
 export interface EarnRecordDocument extends Omit<IEarnRecord, '_id'>, Document {
   _id: mongoose.Types.ObjectId;

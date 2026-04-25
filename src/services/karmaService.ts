@@ -23,11 +23,7 @@ import type {
   IBadge,
   ILevelHistoryEntry,
 } from '../models/KarmaProfile.js';
-import type {
-  Level,
-  ConversionRate,
-  LevelInfo,
-} from '../types/index.js';
+import type { KarmaLevel as Level, KarmaConversionRate as ConversionRate, ILevelInfo as LevelInfo } from '@rez/shared-types';
 import {
   calculateLevel,
   getConversionRate,
@@ -488,11 +484,14 @@ export async function applyDecayToAll(): Promise<{
 export async function getLevelInfo(userId: string): Promise<LevelInfo> {
   const profile = await getOrCreateProfile(userId);
   const level = profile.level as Level;
+  const threshold = nextLevelThreshold(level);
   return {
     level,
+    minKarma: profile.activeKarma,
     conversionRate: getConversionRate(level) as ConversionRate,
-    nextLevelAt: nextLevelThreshold(level),
+    nextLevelAt: threshold,
     activeKarma: profile.activeKarma,
+    benefits: [],
   };
 }
 

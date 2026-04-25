@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import moment from 'moment';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger.js';
-import type { VerificationSignals } from '../types/index.js';
+import type { IVerificationSignals as VerificationSignals } from '@rez/shared-types';
 
 // ---------------------------------------------------------------------------
 // Cross-service EventBooking model (read/write, owned by merchant service).
@@ -109,7 +109,7 @@ export function calculateConfidenceScore(signals: VerificationSignals): number {
   let score = 0;
   if (signals.qr_in) score += SIGNAL_WEIGHTS.qr_in;
   if (signals.qr_out) score += SIGNAL_WEIGHTS.qr_out;
-  score += signals.gps_match * SIGNAL_WEIGHTS.gps_match;
+  score += (signals.gps_match ?? 0) * SIGNAL_WEIGHTS.gps_match;
   if (signals.ngo_approved) score += SIGNAL_WEIGHTS.ngo_approved;
   if (signals.photo_proof) score += SIGNAL_WEIGHTS.photo_proof;
   return Math.round(score * 100) / 100;
@@ -453,7 +453,7 @@ export async function processCheckOut(
             (raw.gpsRadius as number) ?? 100,
           )
         : 0;
-      signals.gps_match = Math.max(signals.gps_match, gpsMatch);
+      signals.gps_match = Math.max(signals.gps_match ?? 0, gpsMatch);
     }
 
     const confidenceScore = calculateConfidenceScore(signals);

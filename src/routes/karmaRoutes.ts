@@ -28,7 +28,7 @@ import { generateImpactReportPDF } from '../services/reportService.js';
 import { generateImpactResume } from '../services/impactResumeService.js';
 import { generateImpactResumePDF } from '../templates/resumeTemplate.js';
 import { nextLevelThreshold, karmaToNextLevel, getConversionRate } from '../engines/karmaEngine.js';
-import type { Level } from '@rez/shared-types';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 import { KarmaProfile, CorporatePartner, CsrAllocation } from '../models/index.js';
 import {
   getCorporateDashboard,

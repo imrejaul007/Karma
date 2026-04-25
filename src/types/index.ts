@@ -1,141 +1,63 @@
-// Canonical source: @rez/shared-types/enums - keep in sync
-// These types are defined locally because @rez/shared-types is not an npm dependency.
-// Any changes here MUST be mirrored in packages/shared-types/src/enums/.
+// @deprecated — re-exported from @rez/shared-types. Migrate imports to @rez/shared-types directly.
 
-export type Level = 'L1' | 'L2' | 'L3' | 'L4';
+import type {
+  BatchStatus,
+  CSRPoolStatus,
+  KarmaScoreComponents,
+  KarmaScoreBand,
+  BandMetadata,
+  TrustGrade,
+  MomentumLabel,
+  EarnRecordStatus,
+} from '@rez/shared-types';
 
-export type ConversionRate = 0.25 | 0.5 | 0.75 | 1.0;
+// ─── Re-export all karma types from canonical source ───────────────────────────
+export type {
+  // Interfaces
+  IKarmaProfile as KarmaProfile,
+  IKarmaEvent as KarmaEvent,
+  IQRCodeSet,
+  IConversionBatch,
+  ILevelInfo as LevelInfo,
+  IKarmaStats,
+  IEarnRecord as EarnRecord,
+  IVerificationSignals as VerificationSignals,
+  IBadge as Badge,
+  ILevelHistoryEntry as LevelHistoryEntry,
+  IConversionHistoryEntry as ConversionHistoryEntry,
+  KarmaProfileDelta,
+  // Enums / unions
+  KarmaLevel as Level,
+  KarmaConversionRate as ConversionRate,
+  EarnRecordStatus,
+  BatchStatus,
+  CSRPoolStatus,
+  KarmaVerificationStatus as VerificationStatus,
+  EventDifficulty,
+  EventCategory,
+  KarmaEventStatus,
+  // KarmaScore types (Phase 3: 300-900 model)
+  KarmaScoreBand,
+  TrustGrade,
+  MomentumLabel,
+  KarmaScoreComponents,
+  BandMetadata,
+  StabilitySnapshot,
+  ScoreHistoryEntry,
+  PerkType,
+  PerkClaimStatus,
+} from '@rez/shared-types';
 
-export type EarnRecordStatus =
-  | 'APPROVED_PENDING_CONVERSION'
-  | 'CONVERTED'
-  | 'REJECTED'
-  | 'ROLLED_BACK'
-  | 'CONVERSION_FAILED';
+// ─── Service-specific types NOT in shared-types ────────────────────────────────
 
-export type BatchStatus = 'DRAFT' | 'READY' | 'EXECUTED' | 'PARTIAL' | 'PAUSED';
-
-export type VerificationStatus = 'pending' | 'partial' | 'verified' | 'rejected';
-
-export type EventDifficulty = 'easy' | 'medium' | 'hard';
-
-export type EventCategory =
-  | 'environment'
-  | 'food'
-  | 'health'
-  | 'education'
-  | 'community';
-
-export type KarmaEventStatus =
-  | 'draft'
-  | 'published'
-  | 'ongoing'
-  | 'completed'
-  | 'cancelled';
-
-export type CSRPoolStatus = 'active' | 'depleted' | 'expired';
-
-export interface Badge {
-  id: string;
-  name: string;
-  earnedAt: Date;
-}
-
-export interface LevelHistoryEntry {
-  level: string;
-  earnedAt: Date;
-  droppedAt?: Date;
-  // G-KS-M1 FIX: Add reason field to track why level changed.
-  reason?: string;
-}
-
-export interface ConversionHistoryEntry {
-  karmaConverted: number;
-  coinsEarned: number;
-  rate: number;
-  batchId: string;
-  convertedAt: Date;
-}
-
-export interface VerificationSignals {
-  qr_in: boolean;
-  qr_out: boolean;
-  gps_match: number;
-  ngo_approved: boolean;
-  photo_proof: boolean;
-}
-
-export interface KarmaProfile {
-  _id: string;
-  userId: string;
-  lifetimeKarma: number;
-  activeKarma: number;
-  level: Level;
-  eventsCompleted: number;
-  eventsJoined: number;
-  totalHours: number;
-  trustScore: number;
-  badges: Badge[];
-  lastActivityAt: Date;
-  levelHistory: LevelHistoryEntry[];
-  conversionHistory: ConversionHistoryEntry[];
-  thisWeekKarmaEarned: number;
-  weekOfLastKarmaEarned?: Date;
-  avgEventDifficulty: number;
-  avgConfidenceScore: number;
-  checkIns: number;
-  approvedCheckIns: number;
-  activityHistory: Date[];
-  createdAt: Date;
-  updatedAt: Date;
-  // G-KS-A1 FIX: Track when decay was last applied to prevent double-decay.
-  lastDecayAppliedAt?: Date;
-  // G-KS-M32 FIX: Store user's timezone for decay calculations.
-  userTimezone?: string;
-}
-
-export interface KarmaEvent {
-  _id: string;
-  merchantEventId: string;
-  ngoId: string;
-  category: EventCategory;
-  impactUnit: string;
-  impactMultiplier: number;
-  difficulty: EventDifficulty;
-  expectedDurationHours: number;
-  baseKarmaPerHour: number;
-  maxKarmaPerEvent: number;
-  qrCodes: {
-    checkIn: string;
-    checkOut: string;
-  };
-  gpsRadius: number;
-  maxVolunteers: number;
-  confirmedVolunteers: number;
-  status: KarmaEventStatus;
-}
-
-export interface EarnRecord {
-  _id: string;
-  userId: string;
-  eventId: string;
-  bookingId: string;
-  karmaEarned: number;
-  activeLevelAtApproval: Level;
-  conversionRateSnapshot: number;
-  csrPoolId: string;
-  verificationSignals: VerificationSignals;
-  confidenceScore: number;
-  status: EarnRecordStatus;
-  createdAt: Date;
-  approvedAt?: Date;
-  convertedAt?: Date;
-  convertedBy?: string;
-  batchId?: string;
-  rezCoinsEarned?: number;
-  idempotencyKey: string;
-}
-
+/**
+ * Conversion batch: internal CSR pool reconciliation record.
+ *
+ * CV-23 NOTE: This is DIFFERENT from IConversionBatch in shared-types.
+ * - IConversionBatch: admin-facing summary of a karma-to-coin conversion run
+ * - Batch: internal CSR pool week reconciliation (weekStart/weekEnd/csrPoolId)
+ * These serve different bounded contexts and must NOT be merged.
+ */
 export interface Batch {
   _id: string;
   weekStart: Date;
@@ -159,6 +81,7 @@ export interface Batch {
   createdAt: Date;
 }
 
+/** CSR pool: corporate social responsibility budget allocation. */
 export interface CSRPool {
   _id: string;
   name: string;
@@ -175,32 +98,7 @@ export interface CSRPool {
   events: string[];
 }
 
-export interface KarmaProfileDelta {
-  activeKarmaChange: number;
-  levelChange: boolean;
-  oldLevel?: Level;
-  newLevel?: Level;
-  // BE-KAR-001 FIX: Track when decay was applied to prevent double-decay
-  lastDecayAppliedAt?: Date;
-}
-
-export interface LevelInfo {
-  level: Level;
-  conversionRate: ConversionRate;
-  nextLevelAt: number | null;
-  activeKarma: number;
-}
-
-// ─── KarmaScore types ─────────────────────────────────────────────────────────
-
-export interface KarmaScoreComponents {
-  base: number;
-  impact: number;
-  relativeRank: number;
-  trust: number;
-  momentum: number;
-}
-
+/** Full karma score response from the Phase 3 scoring engine. */
 export interface KarmaScoreResponse {
   userId: string;
   total: number;
@@ -219,30 +117,7 @@ export interface KarmaScoreResponse {
   } | null;
 }
 
-export interface ScoreHistoryEntry {
-  date: Date;
-  rawScore: number;
-  displayScore: number;
-  band: string;
-  percentile: number;
-  components: KarmaScoreComponents;
-  activeKarma: number;
-  lifetimeKarma: number;
-}
-
-export type KarmaScoreBand = 'starter' | 'active' | 'performer' | 'leader' | 'elite' | 'pinnacle';
-export type TrustGrade = 'D' | 'C' | 'B' | 'A' | 'S';
-export type MomentumLabel = 'cold' | 'slow' | 'steady' | 'hot' | 'blazing';
-
-export interface BandMetadata {
-  label: string;
-  color: string;
-  bgColor: string;
-  minScore: number;
-  maxScore: number;
-  perks: string[];
-}
-
+/** Streak data for user engagement tracking. */
 export interface StreakData {
   currentStreak: number;
   longestStreak: number;
@@ -250,6 +125,7 @@ export interface StreakData {
   streakActive: boolean;
 }
 
+/** Perk claim record for a user claiming a level perk. */
 export interface PerkClaim {
   id: string;
   perkId: string;

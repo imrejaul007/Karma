@@ -13,7 +13,7 @@ import type { MicroActionDocument, MicroActionType } from '../models/MicroAction
 import { KarmaProfile } from '../models/index.js';
 import { logger } from '../config/logger.js';
 import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
-import type { Level } from '../types/index.js';
+import type { KarmaLevel as Level } from '@rez/shared-types';
 
 // ---------------------------------------------------------------------------
 // Types

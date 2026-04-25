@@ -9,7 +9,7 @@ import { EarnRecord, EarnRecordDocument } from '../models/EarnRecord.js';
 import { KarmaProfile, KarmaProfileDocument } from '../models/KarmaProfile.js';
 import { logger } from '../config/logger.js';
 import { getConversionRate, calculateLevel } from '../engines/karmaEngine.js';
-import type { VerificationSignals, EarnRecordStatus, Level } from '../types/index.js';
+import type { IVerificationSignals as VerificationSignals, EarnRecordStatus, KarmaLevel as Level } from '@rez/shared-types';
 import { notifyKarmaReceived } from './notificationService.js';
 
 // ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ export async function createEarnRecord(
   // Store gps_match as 1 (match) or 0 (no match) — VerificationSignals type uses number
   const storedSignals: VerificationSignals = {
     ...verificationSignals,
-    gps_match: verificationSignals.gps_match >= 0.5 ? 1 : 0,
+    gps_match: (verificationSignals.gps_match ?? 0) >= 0.5 ? 1 : 0,
   };
 
   const now = new Date();

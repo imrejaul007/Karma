@@ -66,6 +66,8 @@ export interface IKarmaProfile {
   currentStreak: number;
   longestStreak: number;
   lastStreakUpdatedAt?: Date;
+  // FCM token for push notifications (legacy - prefer UserDevice model)
+  fcmToken?: string;
 }
 
 const BadgeSchema = new Schema<IBadge>(
@@ -149,6 +151,8 @@ const KarmaProfileSchema = new Schema<KarmaProfileDocument>(
     currentStreak: { type: Number, default: 0, min: 0 },
     longestStreak: { type: Number, default: 0, min: 0 },
     lastStreakUpdatedAt: { type: Date },
+    // FCM token for push notifications (legacy - prefer UserDevice model)
+    fcmToken: { type: String },
   },
   {
     timestamps: { createdAt: false, updatedAt: true },

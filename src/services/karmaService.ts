@@ -37,6 +37,7 @@ import {
 } from '../engines/karmaEngine.js';
 import { logger } from '../config/logger.js';
 import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
+import { notifyLevelUp, notifyStreakMilestone } from './notificationService.js';
 
 export { calculateLevel, getConversionRate };
 
@@ -157,6 +158,12 @@ export async function addKarma(
   const hoursToAdd = options?.hours ?? 0;
   const isCheckIn = options?.isCheckIn ?? false;
   const isApproved = isCheckIn && (options?.isApproved ?? false);
+
+  // Get old level before update for notification
+  const oldProfile = await KarmaProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) })
+    .select('level')
+    .lean();
+  const oldLevel = oldProfile?.level as Level | undefined;
 
   const updatedProfile = await KarmaProfile.findOneAndUpdate(
     {
@@ -307,6 +314,14 @@ export async function addKarma(
     newActiveKarma: updatedProfile.activeKarma,
     newLevel: updatedProfile.level as Level,
   });
+
+  // Send level up notification if level changed
+  const newLevel = updatedProfile.level as Level;
+  if (oldLevel && newLevel !== oldLevel) {
+    notifyLevelUp(userId, newLevel, oldLevel).catch((err) => {
+      logger.warn('[KarmaService] Level up notification failed', { userId, oldLevel, newLevel, error: err });
+    });
+  }
 }
 
 /**
@@ -604,7 +619,9 @@ export interface StreakUpdateResult {
  * - If last activity was >1 day ago: reset currentStreak to 0
  *
  * longestStreak is always max(currentStreak, longestStreak).
+ * Sends streak milestone notifications for 7, 14, 30, 60, 90 day streaks.
  */
+const STREAK_MILESTONES = [7, 14, 30, 60, 90, 180, 365];
 export async function updateStreaks(): Promise<StreakUpdateResult> {
   const now = new Date();
   const yesterdayStart = moment(now).subtract(1, 'day').startOf('day').toDate();
@@ -660,6 +677,14 @@ export async function updateStreaks(): Promise<StreakUpdateResult> {
           },
         );
         result.incremented++;
+
+        // Check for streak milestone notification
+        if (STREAK_MILESTONES.includes(newStreak)) {
+          const userIdStr = profile.userId.toString();
+          notifyStreakMilestone(userIdStr, newStreak).catch((err) => {
+            logger.warn('[KarmaService] Streak milestone notification failed', { userId: userIdStr, streakDays: newStreak, error: err });
+          });
+        }
       } else if (wasToday) {
         // Activity happened today — streak already set by earnRecordService
         // Mark as updated so we don't double-count

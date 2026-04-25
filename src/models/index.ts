@@ -1,6 +1,9 @@
 export { KarmaProfile } from './KarmaProfile';
 export type { KarmaProfileDocument, IKarmaProfile, IBadge, ILevelHistoryEntry, IConversionHistoryEntry } from './KarmaProfile';
 
+export { UserDevice } from './UserDevice';
+export type { UserDeviceDocument, IUserDevice, DevicePlatform } from './UserDevice';
+
 export { KarmaEvent } from './KarmaEvent';
 export type { KarmaEventDocument, IKarmaEvent, IQRCodeSet } from './KarmaEvent';
 

@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { CauseCommunity, CauseCommunityDocument, CommunityCategory } from '../models/CauseCommunity';
 import { CommunityPost, CommunityPostDocument, PostAuthorType } from '../models/CommunityPost';
+import { notifyFollowersOfNewPost } from './notificationService.js';
+import { logger } from '../config/logger.js';
 
 export interface CommunityWithStats {
   _id: string;
@@ -225,6 +227,19 @@ export async function createPost(
 
   await post.save();
   await community.addPost(post._id);
+
+  // Send notifications to followers (fire-and-forget)
+  const followerIds = community.followerIds.map((id) => id.toString());
+  notifyFollowersOfNewPost(
+    authorId,
+    community.name,
+    community.slug,
+    post._id.toString(),
+    content,
+    followerIds,
+  ).catch((err) => {
+    logger.error('[CommunityService] Failed to send post notifications', { error: err });
+  });
 
   return {
     _id: post._id.toString(),

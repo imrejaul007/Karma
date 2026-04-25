@@ -20,4 +20,5 @@ module.exports = {
   coverageDirectory: 'coverage',
   collectCoverageFrom: ['src/**/*.ts', '!src/index.ts'],
   testTimeout: 30000,
+  forceExit: true,
 };

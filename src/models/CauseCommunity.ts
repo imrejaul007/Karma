@@ -156,9 +156,11 @@ CauseCommunitySchema.methods.addPost = async function (
 };
 
 // Indexes
+// Note: slug has unique:true in field definition (line 55)
+// Note: category has index:true in field definition (line 68)
+// Note: followerIds has index:true in field definition (line 87)
+// Only define explicit indexes here if they differ from field-level definitions
 CauseCommunitySchema.index({ slug: 1 }, { unique: true });
-CauseCommunitySchema.index({ category: 1 });
-CauseCommunitySchema.index({ followerIds: 1 });
 
 export const CauseCommunity: Model<CauseCommunityDocument> =
   mongoose.models.CauseCommunity ||

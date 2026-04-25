@@ -62,6 +62,10 @@ export interface IKarmaProfile {
   communityEvents: number;
   hardEvents: number;
   uniqueCategories: string[];
+  // Streak tracking for mission/badge evaluation
+  currentStreak: number;
+  longestStreak: number;
+  lastStreakUpdatedAt?: Date;
 }
 
 const BadgeSchema = new Schema<IBadge>(
@@ -141,6 +145,10 @@ const KarmaProfileSchema = new Schema<KarmaProfileDocument>(
     communityEvents: { type: Number, default: 0, min: 0 },
     hardEvents: { type: Number, default: 0, min: 0 },
     uniqueCategories: { type: [String], default: [] },
+    // Streak tracking for mission/badge evaluation
+    currentStreak: { type: Number, default: 0, min: 0 },
+    longestStreak: { type: Number, default: 0, min: 0 },
+    lastStreakUpdatedAt: { type: Date },
   },
   {
     timestamps: { createdAt: false, updatedAt: true },

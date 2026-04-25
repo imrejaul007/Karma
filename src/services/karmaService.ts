@@ -584,3 +584,104 @@ export async function getKarmaHistory(
       convertedAt: entry.convertedAt,
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Streak Computation — runs daily as part of the decay cron
+// ---------------------------------------------------------------------------
+
+export interface StreakUpdateResult {
+  processed: number;
+  incremented: number;
+  reset: number;
+}
+
+/**
+ * Update streaks for all active profiles.
+ *
+ * Runs daily at midnight UTC. Logic:
+ * - If last activity was YESTERDAY (UTC): increment currentStreak
+ * - If last activity was TODAY: streak already set when karma was earned — skip
+ * - If last activity was >1 day ago: reset currentStreak to 0
+ *
+ * longestStreak is always max(currentStreak, longestStreak).
+ */
+export async function updateStreaks(): Promise<StreakUpdateResult> {
+  const now = new Date();
+  const yesterdayStart = moment(now).subtract(1, 'day').startOf('day').toDate();
+  const yesterdayEnd = moment(now).subtract(1, 'day').endOf('day').toDate();
+  const twoDaysAgoStart = moment(now).subtract(2, 'day').startOf('day').toDate();
+
+  // Only process profiles active in the last 90 days — skip dormant ones
+  const activeCutoff = moment(now).subtract(90, 'days').toDate();
+
+  const result: StreakUpdateResult = { processed: 0, incremented: 0, reset: 0 };
+
+  // Process in batches to avoid memory pressure
+  const BATCH_SIZE = 500;
+  let processed = 0;
+
+  while (true) {
+    const profiles = await KarmaProfile.find(
+      {
+        lastActivityAt: { $gte: activeCutoff },
+        lastStreakUpdatedAt: { $ne: moment(now).startOf('day').toDate() },
+      },
+      { _id: 1, userId: 1, lastActivityAt: 1, currentStreak: 1, longestStreak: 1 },
+    )
+      .limit(BATCH_SIZE)
+      .lean();
+
+    if (profiles.length === 0) break;
+
+    for (const profile of profiles) {
+      const lastActivity = profile.lastActivityAt ? new Date(profile.lastActivityAt) : null;
+
+      if (!lastActivity) {
+        processed++;
+        continue;
+      }
+
+      const lastActivityDay = moment(lastActivity).startOf('day');
+      const yesterdayStartMoment = moment(yesterdayStart);
+      const twoDaysAgoStartMoment = moment(twoDaysAgoStart);
+
+      const wasYesterday = lastActivityDay.isSame(yesterdayStartMoment, 'day');
+      const wasToday = lastActivityDay.isSame(moment(now).startOf('day'), 'day');
+      const missedADay = lastActivityDay.isBefore(twoDaysAgoStartMoment, 'day');
+
+      if (wasYesterday) {
+        // First activity since last cron — increment streak
+        const newStreak = (profile.currentStreak ?? 0) + 1;
+        const newLongest = Math.max(newStreak, profile.longestStreak ?? 0);
+        await KarmaProfile.updateOne(
+          { _id: profile._id },
+          {
+            $set: { currentStreak: newStreak, longestStreak: newLongest, lastStreakUpdatedAt: now },
+          },
+        );
+        result.incremented++;
+      } else if (wasToday) {
+        // Activity happened today — streak already set by earnRecordService
+        // Mark as updated so we don't double-count
+        await KarmaProfile.updateOne(
+          { _id: profile._id },
+          { $set: { lastStreakUpdatedAt: now } },
+        );
+      } else if (missedADay) {
+        // More than 1 day gap — reset streak
+        if ((profile.currentStreak ?? 0) > 0) {
+          await KarmaProfile.updateOne(
+            { _id: profile._id },
+            { $set: { currentStreak: 0, lastStreakUpdatedAt: now } },
+          );
+          result.reset++;
+        }
+      }
+
+      processed++;
+    }
+  }
+
+  result.processed = processed;
+  return result;
+}

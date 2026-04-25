@@ -11,6 +11,8 @@
  * GET  /api/karma/my-bookings              — list user's joined events
  * PATCH /api/karma/booking/:bookingId/approve — NGO approves a booking
  * GET  /api/karma/report                   — generate Impact Report PDF
+ * GET  /api/karma/resume                   — generate Impact Resume JSON
+ * GET  /api/karma/resume/pdf               — generate Impact Resume PDF
  */
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
@@ -23,10 +25,36 @@ import {
   applyDecayToAll,
 } from '../services/karmaService.js';
 import { generateImpactReportPDF } from '../services/reportService.js';
+import { generateImpactResume } from '../services/impactResumeService.js';
+import { generateImpactResumePDF } from '../templates/resumeTemplate.js';
 import { nextLevelThreshold, karmaToNextLevel, getConversionRate } from '../engines/karmaEngine.js';
 import type { Level } from '../types/index.js';
-import { KarmaProfile } from '../models/index.js';
+import { KarmaProfile, CorporatePartner, CsrAllocation } from '../models/index.js';
+import {
+  getCorporateDashboard,
+  allocateKarmaCredits,
+  generateCsrReport,
+  addEmployeeToProgram,
+  getEmployeeStats,
+} from '../services/csrService.js';
 import { logger } from '../config/logger.js';
+import {
+  getLeaderboard,
+  getUserRank,
+  getTotalParticipants,
+  type LeaderboardScope,
+  type LeaderboardPeriod,
+} from '../services/leaderboardService.js';
+import {
+  getAllCommunities,
+  getCommunity,
+  followCommunity,
+  unfollowCommunity,
+  getCommunityFeed,
+  createPost,
+  getRecommendedCommunities,
+  getUserCommunities,
+} from '../services/communityService.js';
 
 const router = Router();
 
@@ -42,13 +70,13 @@ router.get('/user/:userId', requireAuth, async (req: Request, res: Response) => 
     // KARMA-P1 FIX: Verify the authenticated user owns this karma profile.
     // Without this, any authenticated user can read any other user's karma.
     if (req.userId !== userId) {
-      res.status(403).json({ error: 'Access denied: you can only view your own karma profile' });
+      res.status(403).json({ success: false, message: 'Access denied: you can only view your own karma profile' });
       return;
     }
     const profile = await getKarmaProfile(userId);
 
     if (!profile) {
-      res.status(404).json({ error: 'Karma profile not found for this user' });
+      res.status(404).json({ success: false, message: 'Karma profile not found for this user' });
       return;
     }
 
@@ -84,7 +112,7 @@ router.get('/user/:userId', requireAuth, async (req: Request, res: Response) => 
     });
   } catch (err) {
     logger.error('Error fetching karma profile', { error: err });
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
@@ -101,7 +129,7 @@ router.get(
       if (userId === 'me') userId = req.userId ?? '';
       // KARMA-P1 FIX: Verify ownership.
       if (req.userId !== userId) {
-        res.status(403).json({ error: 'Access denied: you can only view your own conversion history' });
+        res.status(403).json({ success: false, message: 'Access denied: you can only view your own conversion history' });
         return;
       }
       let limit = parseInt(String(req.query.limit ?? '20'), 10);
@@ -112,7 +140,7 @@ router.get(
       res.json({ history });
     } catch (err) {
       logger.error('Error fetching karma history', { error: err });
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ success: false, message: 'Internal server error' });
     }
   },
 );
@@ -130,14 +158,14 @@ router.get(
       if (userId === 'me') userId = req.userId ?? '';
       // KARMA-P1 FIX: Verify ownership.
       if (req.userId !== userId) {
-        res.status(403).json({ error: 'Access denied: you can only view your own level info' });
+        res.status(403).json({ success: false, message: 'Access denied: you can only view your own level info' });
         return;
       }
       const levelInfo = await getLevelInfo(userId);
       res.json(levelInfo);
     } catch (err) {
       logger.error('Error fetching level info', { error: err });
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ success: false, message: 'Internal server error' });
     }
   },
 );
@@ -158,7 +186,7 @@ router.post('/decay-all', requireAdmin, async (_req: Request, res: Response) => 
     });
   } catch (err) {
     logger.error('Error running decay job', { error: err });
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
@@ -174,7 +202,7 @@ router.get('/missions', requireAuth, async (req: Request, res: Response) => {
     res.json({ success: true, missions });
   } catch (err) {
     logger.error('GET /missions error', { error: err });
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
@@ -186,14 +214,14 @@ router.get('/badges', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.userId ?? '';
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      res.status(400).json({ error: 'Invalid userId' });
+      res.status(400).json({ success: false, message: 'Invalid userId' });
       return;
     }
     const profile = await KarmaProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).lean();
     res.json({ success: true, badges: profile?.badges ?? [] });
   } catch (err) {
     logger.error('GET /badges error', { error: err });
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 
@@ -206,14 +234,14 @@ router.get('/report', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.userId ?? '';
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      res.status(400).json({ error: 'Invalid userId' });
+      res.status(400).json({ success: false, message: 'Invalid userId' });
       return;
     }
 
     const userName = String(req.query.name ?? req.query.userName ?? 'ReZ Volunteer');
     const sanitizedName = userName.replace(/[^\w\s'-]/g, '').trim();
     if (!sanitizedName) {
-      res.status(400).json({ error: 'userName is required' });
+      res.status(400).json({ success: false, message: 'userName is required' });
       return;
     }
 
@@ -228,7 +256,66 @@ router.get('/report', requireAuth, async (req: Request, res: Response) => {
     res.end(pdfBuffer);
   } catch (err) {
     logger.error('GET /report error', { error: err });
-    res.status(500).json({ error: 'Failed to generate report' });
+    res.status(500).json({ success: false, message: 'Failed to generate report' });
+  }
+});
+
+/**
+ * GET /api/karma/resume
+ * Returns the user's Impact Resume as structured JSON.
+ * Designed for LinkedIn, college applications, CSR reporting, or job resumes.
+ */
+router.get('/resume', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ success: false, message: 'Invalid userId' });
+      return;
+    }
+
+    const resume = await generateImpactResume(userId);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json(resume);
+  } catch (err) {
+    logger.error('GET /resume error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to generate resume' });
+  }
+});
+
+/**
+ * GET /api/karma/resume/pdf
+ * Returns the user's Impact Resume as a branded PDF.
+ * Two-column layout: left = metrics/timeline, right = badges/skills.
+ * Formatted for LinkedIn/CSR use.
+ */
+router.get('/resume/pdf', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ success: false, message: 'Invalid userId' });
+      return;
+    }
+
+    const userName = String(req.query.name ?? req.query.userName ?? 'Volunteer');
+    const sanitizedName = userName.replace(/[^\w\s'-]/g, '').trim();
+    if (!sanitizedName) {
+      res.status(400).json({ success: false, message: 'userName is required' });
+      return;
+    }
+
+    const resume = await generateImpactResume(userId);
+    const pdfBuffer = await generateImpactResumePDF(resume, { userName: sanitizedName });
+    const safeName = sanitizedName.replace(/\s+/g, '_');
+    const filename = `ImpactResume_${safeName}_${Date.now()}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.end(pdfBuffer);
+  } catch (err) {
+    logger.error('GET /resume/pdf error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to generate resume PDF' });
   }
 });
 
@@ -439,6 +526,640 @@ router.patch('/booking/:bookingId/approve', requireAdmin, async (req: Request, r
   } catch (err) {
     logger.error('[karmaRoutes] PATCH /booking/approve error', { error: err });
     res.status(500).json({ success: false, message: 'Failed to update booking approval' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/leaderboard — Get leaderboard entries
+// ---------------------------------------------------------------------------
+
+router.get('/leaderboard', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+
+    // Parse and validate query parameters
+    const scope = (req.query.scope as LeaderboardScope) ?? 'global';
+    const period = (req.query.period as LeaderboardPeriod) ?? 'all-time';
+
+    // Validate scope
+    const validScopes: LeaderboardScope[] = ['global', 'city', 'cause'];
+    if (!validScopes.includes(scope)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid scope. Must be one of: ${validScopes.join(', ')}`,
+      });
+      return;
+    }
+
+    // Validate period
+    const validPeriods: LeaderboardPeriod[] = ['all-time', 'monthly', 'weekly'];
+    if (!validPeriods.includes(period)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid period. Must be one of: ${validPeriods.join(', ')}`,
+      });
+      return;
+    }
+
+    // Parse limit with bounds
+    const rawLimit = parseInt(String(req.query.limit ?? '50'), 10);
+    const limit = isNaN(rawLimit) ? 50 : Math.min(Math.max(1, rawLimit), 100);
+
+    // Parse offset
+    const rawOffset = parseInt(String(req.query.offset ?? '0'), 10);
+    const offset = isNaN(rawOffset) ? 0 : Math.max(0, rawOffset);
+
+    const result = await getLeaderboard(scope, period, limit, offset, userId);
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /leaderboard error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch leaderboard' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/leaderboard/me — Get current user's rank
+// ---------------------------------------------------------------------------
+
+router.get('/leaderboard/me', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+
+    // Parse and validate query parameters
+    const scope = (req.query.scope as LeaderboardScope) ?? 'global';
+    const period = (req.query.period as LeaderboardPeriod) ?? 'all-time';
+
+    // Validate scope
+    const validScopes: LeaderboardScope[] = ['global', 'city', 'cause'];
+    if (!validScopes.includes(scope)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid scope. Must be one of: ${validScopes.join(', ')}`,
+      });
+      return;
+    }
+
+    // Validate period
+    const validPeriods: LeaderboardPeriod[] = ['all-time', 'monthly', 'weekly'];
+    if (!validPeriods.includes(period)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid period. Must be one of: ${validPeriods.join(', ')}`,
+      });
+      return;
+    }
+
+    const [rank, totalParticipants] = await Promise.all([
+      getUserRank(userId, scope, period),
+      getTotalParticipants(scope, period),
+    ]);
+
+    res.json({
+      success: true,
+      rank,
+      totalParticipants,
+      scope,
+      period,
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /leaderboard/me error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch user rank' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/communities — List all communities
+// ---------------------------------------------------------------------------
+
+router.get('/communities', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    const communities = await getAllCommunities(userId);
+    res.json({ communities });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /communities error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch communities' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/communities/:slug — Get community detail + recent posts
+// ---------------------------------------------------------------------------
+
+router.get('/communities/:slug', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.userId ?? '';
+    const community = await getCommunity(slug, userId);
+    if (!community) {
+      res.status(404).json({ success: false, message: 'Community not found' });
+      return;
+    }
+    res.json(community);
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /communities/:slug error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch community' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/communities/:slug/follow — Follow a community
+// ---------------------------------------------------------------------------
+
+router.post('/communities/:slug/follow', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.userId ?? '';
+    await followCommunity(userId, slug);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /communities/:slug/follow error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to follow community';
+    if (message === 'Community not found') {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/karma/communities/:slug/follow — Unfollow a community
+// ---------------------------------------------------------------------------
+
+router.delete('/communities/:slug/follow', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.userId ?? '';
+    await unfollowCommunity(userId, slug);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[karmaRoutes] DELETE /communities/:slug/follow error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to unfollow community';
+    if (message === 'Community not found') {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/communities/:slug/feed — Get community feed (paginated posts)
+// ---------------------------------------------------------------------------
+
+router.get('/communities/:slug/feed', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const page = parseInt(String(req.query.page ?? '1'), 10);
+    const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10), 50);
+    const feed = await getCommunityFeed(slug, page, limit);
+    res.json({ posts: feed, page, limit });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /communities/:slug/feed error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch community feed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/communities/:slug/posts — Create a post in a community
+// ---------------------------------------------------------------------------
+
+router.post('/communities/:slug/posts', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const { content, mediaUrls } = req.body as { content?: string; mediaUrls?: string[] };
+    if (!content || content.trim().length === 0) {
+      res.status(400).json({ success: false, message: 'content is required' });
+      return;
+    }
+    const userId = req.userId ?? '';
+    const post = await createPost(slug, userId, 'volunteer', content, mediaUrls);
+    res.status(201).json(post);
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /communities/:slug/posts error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to create post';
+    if (message === 'Community not found') {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/communities/recommended — Get recommended communities for user
+// ---------------------------------------------------------------------------
+
+router.get('/communities/recommended', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    const communities = await getRecommendedCommunities(userId);
+    res.json({ communities });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /communities/recommended error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch recommended communities' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/communities/my — Get communities the user follows
+// ---------------------------------------------------------------------------
+
+router.get('/communities/my', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    const communities = await getUserCommunities(userId);
+    res.json({ communities });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /communities/my error', { error: err });
+    res.status(500).json({ error: 'Failed to fetch user communities' });
+  }
+});
+
+// ============================================================================
+// CSR Cloud Routes — Corporate Social Responsibility Dashboard
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/csr/dashboard — get corporate partner dashboard (admin only)
+// ---------------------------------------------------------------------------
+
+router.get('/csr/dashboard', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { partnerId } = req.query;
+    if (!partnerId || typeof partnerId !== 'string') {
+      res.status(400).json({ success: false, message: 'partnerId required' });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(partnerId)) {
+      res.status(400).json({ success: false, message: 'Invalid partnerId format' });
+      return;
+    }
+
+    const dashboard = await getCorporateDashboard(partnerId);
+    res.json(dashboard);
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /csr/dashboard error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to fetch dashboard';
+    if (message.includes('not found')) {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/csr/allocate — allocate karma credits to employee
+// ---------------------------------------------------------------------------
+
+router.post('/csr/allocate', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { partnerId, recipientUserId, amount, eventId } = req.body as {
+      partnerId?: string;
+      recipientUserId?: string;
+      amount?: number;
+      eventId?: string;
+    };
+
+    if (!partnerId || !recipientUserId || amount === undefined) {
+      res.status(400).json({ success: false, message: 'Missing required fields: partnerId, recipientUserId, amount' });
+      return;
+    }
+
+    if (typeof amount !== 'number' || amount <= 0) {
+      res.status(400).json({ success: false, message: 'amount must be a positive number' });
+      return;
+    }
+
+    await allocateKarmaCredits(partnerId, recipientUserId, amount, eventId);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /csr/allocate error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to allocate karma credits';
+    if (message.includes('not found') || message.includes('Invalid')) {
+      res.status(400).json({ success: false, message });
+      return;
+    }
+    if (message.includes('Insufficient')) {
+      res.status(400).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/csr/partner — create a corporate partner (admin)
+// ---------------------------------------------------------------------------
+
+router.post('/csr/partner', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { companyName, logoUrl, contactEmail, tier, creditsBudget } = req.body as {
+      companyName?: string;
+      logoUrl?: string;
+      contactEmail?: string;
+      tier?: string;
+      creditsBudget?: number;
+    };
+
+    if (!companyName || !tier || creditsBudget === undefined) {
+      res.status(400).json({ success: false, message: 'Missing required fields: companyName, tier, creditsBudget' });
+      return;
+    }
+
+    const validTiers = ['bronze', 'silver', 'gold', 'platinum'];
+    if (!validTiers.includes(tier)) {
+      res.status(400).json({ success: false, message: `Invalid tier. Must be one of: ${validTiers.join(', ')}` });
+      return;
+    }
+
+    if (typeof creditsBudget !== 'number' || creditsBudget < 0) {
+      res.status(400).json({ success: false, message: 'creditsBudget must be a non-negative number' });
+      return;
+    }
+
+    const slug = companyName
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+
+    const partner = await CorporatePartner.create({
+      companyName,
+      companySlug: slug,
+      logoUrl: logoUrl || '',
+      contactEmail: contactEmail || '',
+      tier,
+      creditsBudget,
+      creditsUsed: 0,
+    });
+
+    logger.info('[karmaRoutes] CorporatePartner created', { partnerId: partner._id, companyName });
+
+    res.status(201).json({ success: true, partner });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /csr/partner error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to create corporate partner';
+    if (message.includes('duplicate') || message.includes('E11000')) {
+      res.status(409).json({ success: false, message: 'A partner with this company name already exists' });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/csr/partners — list all corporate partners
+// ---------------------------------------------------------------------------
+
+router.get('/csr/partners', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const partners = await CorporatePartner.find()
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ partners });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /csr/partners error', { error: err });
+    res.status(500).json({ success: false, message: 'Failed to fetch partners' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/csr/report/:partnerId?year=2026&quarter=1 — generate CSR report
+// ---------------------------------------------------------------------------
+
+router.get('/csr/report/:partnerId', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { partnerId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(partnerId)) {
+      res.status(400).json({ success: false, message: 'Invalid partnerId format' });
+      return;
+    }
+
+    const year = parseInt(String(req.query.year ?? new Date().getFullYear()), 10);
+    const quarter = parseInt(String(req.query.quarter ?? String(Math.ceil((new Date().getMonth() + 1) / 3))), 10);
+
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      res.status(400).json({ success: false, message: 'Invalid year' });
+      return;
+    }
+
+    if (isNaN(quarter) || quarter < 1 || quarter > 4) {
+      res.status(400).json({ success: false, message: 'Invalid quarter. Must be 1-4' });
+      return;
+    }
+
+    const report = await generateCsrReport(partnerId, year, quarter);
+    res.json(report);
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /csr/report error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to generate CSR report';
+    if (message.includes('not found')) {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/karma/csr/partner/:partnerId/employee — add employee to program
+// ---------------------------------------------------------------------------
+
+router.post('/csr/partner/:partnerId/employee', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { partnerId } = req.params;
+    const { employeeUserId } = req.body as { employeeUserId?: string };
+
+    if (!partnerId || !employeeUserId) {
+      res.status(400).json({ success: false, message: 'Missing required fields: partnerId, employeeUserId' });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(partnerId) || !mongoose.Types.ObjectId.isValid(employeeUserId)) {
+      res.status(400).json({ success: false, message: 'Invalid ID format' });
+      return;
+    }
+
+    await addEmployeeToProgram(partnerId, employeeUserId);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /csr/partner/employee error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to add employee';
+    if (message.includes('not found')) {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/karma/csr/partner/:partnerId/employee/:employeeUserId — get employee stats
+// ---------------------------------------------------------------------------
+
+router.get('/csr/partner/:partnerId/employee/:employeeUserId', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { partnerId, employeeUserId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(partnerId) || !mongoose.Types.ObjectId.isValid(employeeUserId)) {
+      res.status(400).json({ success: false, message: 'Invalid ID format' });
+      return;
+    }
+
+    const stats = await getEmployeeStats(partnerId, employeeUserId);
+    res.json(stats);
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /csr/partner/employee/stats error', { error: err });
+    const message = err instanceof Error ? err.message : 'Failed to fetch employee stats';
+    if (message.includes('not found')) {
+      res.status(404).json({ success: false, message });
+      return;
+    }
+    res.status(500).json({ success: false, message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Micro-Actions Routes — Daily engagement tasks
+// ---------------------------------------------------------------------------
+
+import {
+  getUserActionStatus,
+  completeAction,
+  getTodayEarnings,
+  MICRO_ACTIONS_REGISTRY,
+} from '../services/microActionService.js';
+
+/**
+ * GET /api/karma/micro-actions
+ * Returns all micro-actions with their completion status for today.
+ */
+router.get('/micro-actions', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ success: false, message: 'Invalid userId' });
+      return;
+    }
+
+    // Get all actions with completion status
+    const actionStatus = await getUserActionStatus(userId);
+    const completed = actionStatus.filter((s) => s.completed);
+    const available = actionStatus.filter((s) => !s.completed);
+
+    // Calculate total karma earned today
+    const earnedToday = completed.reduce((sum, a) => sum + (a.earnedKarma ?? 0), 0);
+
+    res.json({
+      success: true,
+      available: available.map((s) => ({
+        actionKey: s.action.actionKey,
+        name: s.action.name,
+        description: s.action.description,
+        karmaBonus: s.action.karmaBonus,
+        icon: s.action.icon,
+      })),
+      completed: completed.map((s) => ({
+        actionKey: s.action.actionKey,
+        name: s.action.name,
+        completedAt: s.completedAt,
+        karmaEarned: s.earnedKarma,
+      })),
+      earnedToday,
+      totalActions: MICRO_ACTIONS_REGISTRY.length,
+      dailyComplete: available.length === 0,
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] GET /micro-actions error', { error: err });
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/karma/micro-actions/:actionKey/claim
+ * Claim a micro-action and receive karma bonus.
+ */
+router.post('/micro-actions/:actionKey/claim', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    const { actionKey } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ success: false, message: 'Invalid userId' });
+      return;
+    }
+
+    // Validate actionKey exists
+    const validKeys = MICRO_ACTIONS_REGISTRY.map((a) => a.actionKey);
+    if (!validKeys.includes(actionKey)) {
+      res.status(400).json({ success: false, message: `Invalid actionKey. Valid keys: ${validKeys.join(', ')}` });
+      return;
+    }
+
+    const result = await completeAction(userId, actionKey);
+
+    if (!result.earned) {
+      res.status(409).json({ success: false, message: 'Already claimed today' });
+      return;
+    }
+
+    // Get updated total earned today
+    const totalEarnedToday = await getTodayEarnings(userId);
+
+    res.json({
+      success: true,
+      actionKey,
+      karmaEarned: result.karma,
+      totalEarnedToday,
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /micro-actions/claim error', { error: err });
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/karma/micro-actions/:actionKey/trigger
+ * Trigger a micro-action completion (called by other services/events).
+ * Internal endpoint - can be called by other services.
+ */
+router.post('/micro-actions/:actionKey/trigger', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    const { actionKey } = req.params;
+    const { trigger } = req.body as { trigger?: string };
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ success: false, message: 'Invalid userId' });
+      return;
+    }
+
+    const { evaluateMicroActions } = await import('../engines/microActionEngine.js');
+    const validTriggers = ['app_open', 'profile_update', 'referral_credited', 'event_completed', 'share_click'];
+
+    if (trigger && !validTriggers.includes(trigger)) {
+      res.status(400).json({ success: false, message: `Invalid trigger. Valid triggers: ${validTriggers.join(', ')}` });
+      return;
+    }
+
+    const result = await evaluateMicroActions(userId, (trigger ?? 'app_open') as import('../engines/microActionEngine.js').MicroActionTrigger);
+
+    res.json({
+      success: true,
+      triggered: result.newActions.length > 0,
+      newActions: result.newActions,
+      bonusKarma: result.bonusKarma,
+    });
+  } catch (err) {
+    logger.error('[karmaRoutes] POST /micro-actions/trigger error', { error: err });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
 

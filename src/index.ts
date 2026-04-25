@@ -24,6 +24,7 @@ import bookingRoutes from './routes/bookingRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
 import { initScoreRankWorker } from './workers/scoreRankWorker';
 import { startDecayWorker } from './workers/decayWorker';
+import { seedCommunities } from './config/communitySeed.js';
 
 const app = express();
 // Behind Render LB + CF — trust N hops so per-IP rate limiters key on real client IP.
@@ -159,6 +160,9 @@ async function start() {
   }
 
   await connectMongoDB();
+
+  // Seed default Cause Communities (idempotent — safe on every startup)
+  await seedCommunities();
 
   // XS-CRIT-007 FIX: Start the coin event subscriber so the karma service can
   // react to coin credit events from the wallet service and other services.

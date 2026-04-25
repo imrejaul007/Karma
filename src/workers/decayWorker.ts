@@ -6,7 +6,7 @@
  * for 30+ days, and logs level drops.
  */
 import { CronJob } from 'cron';
-import { applyDecayToAll } from '../services/karmaService.js';
+import { applyDecayToAll, updateStreaks } from '../services/karmaService.js';
 import { logger } from '../config/logger.js';
 import { redis } from '../config/redis.js';
 
@@ -74,16 +74,29 @@ export async function runDecayJob(): Promise<{
   processed: number;
   decayed: number;
   levelDrops: number;
+  streakUpdated: number;
+  streakIncremented: number;
+  streakReset: number;
 }> {
   logger.info('Starting daily karma decay job');
 
   try {
-    const result = await applyDecayToAll();
+    const [decayResult, streakResult] = await Promise.all([
+      applyDecayToAll(),
+      updateStreaks(),
+    ]);
     logger.info(
-      `Decay job finished: processed=${result.processed}, ` +
-        `decayed=${result.decayed}, levelDrops=${result.levelDrops}`,
+      `Decay job finished: processed=${decayResult.processed}, ` +
+        `decayed=${decayResult.decayed}, levelDrops=${decayResult.levelDrops}, ` +
+        `streakUpdated=${streakResult.processed}, streakIncremented=${streakResult.incremented}, ` +
+        `streakReset=${streakResult.reset}`,
     );
-    return result;
+    return {
+      ...decayResult,
+      streakUpdated: streakResult.processed,
+      streakIncremented: streakResult.incremented,
+      streakReset: streakResult.reset,
+    };
   } catch (err) {
     logger.error('Decay job failed with error', { error: err });
     throw err;

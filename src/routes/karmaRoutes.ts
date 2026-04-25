@@ -10,6 +10,7 @@
  * POST /api/karma/admin/event               — create a karma event (NGO)
  * GET  /api/karma/my-bookings              — list user's joined events
  * PATCH /api/karma/booking/:bookingId/approve — NGO approves a booking
+ * GET  /api/karma/report                   — generate Impact Report PDF
  */
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
@@ -21,6 +22,7 @@ import {
   getKarmaHistory,
   applyDecayToAll,
 } from '../services/karmaService.js';
+import { generateImpactReportPDF } from '../services/reportService.js';
 import { nextLevelThreshold, karmaToNextLevel, getConversionRate } from '../engines/karmaEngine.js';
 import type { Level } from '../types/index.js';
 import { KarmaProfile } from '../models/index.js';
@@ -192,6 +194,41 @@ router.get('/badges', requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     logger.error('GET /badges error', { error: err });
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/karma/report
+ * Generate and return the user's Impact Report as a branded PDF.
+ * Consumer passes userName in query (consumer has it from auth store).
+ */
+router.get('/report', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId ?? '';
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ error: 'Invalid userId' });
+      return;
+    }
+
+    const userName = String(req.query.name ?? req.query.userName ?? 'ReZ Volunteer');
+    const sanitizedName = userName.replace(/[^\w\s'-]/g, '').trim();
+    if (!sanitizedName) {
+      res.status(400).json({ error: 'userName is required' });
+      return;
+    }
+
+    const pdfBuffer = await generateImpactReportPDF(userId, sanitizedName);
+    const safeName = sanitizedName.replace(/\s+/g, '_');
+    const filename = `ImpactReport_${safeName}_${Date.now()}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.end(pdfBuffer);
+  } catch (err) {
+    logger.error('GET /report error', { error: err });
+    res.status(500).json({ error: 'Failed to generate report' });
   }
 });
 

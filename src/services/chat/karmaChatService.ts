@@ -1,7 +1,7 @@
 // ── Karma Chat Service ──────────────────────────────────────────────────────────────
 // Gamification & rewards chat actions
 
-import { logger } from '@rez/chat-integration/socket/logger';
+import { logger } from '../../config/logger.js';
 
 export interface KarmaContext {
   userId: string;

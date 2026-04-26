@@ -153,6 +153,20 @@ async function sendPushNotification(payload: PushNotificationPayload): Promise<b
  *
  * Returns null if no token is found.
  */
+// ── Generic Send ───────────────────────────────────────────────────────────────
+
+export interface SendToUserPayload {
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}
+
+export async function sendToUser(userId: string, payload: SendToUserPayload): Promise<void> {
+  const token = await getUserDeviceToken(userId);
+  if (!token) return;
+  await sendPushNotification({ token, title: payload.title, body: payload.body, data: payload.data });
+}
+
 export async function getUserDeviceToken(userId: string): Promise<string | null> {
   try {
     // Try KarmaProfile.fcmToken first (legacy fallback)

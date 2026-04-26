@@ -26,7 +26,8 @@ export type MicroActionTrigger =
   | 'referral_credited'
   | 'event_completed'
   | 'streak_updated'
-  | 'share_click';
+  | 'share_click'
+  | 'civic_action';
 
 interface TriggerResult {
   actionKey: string;
@@ -53,6 +54,8 @@ const TRIGGER_ACTION_MAP: Record<MicroActionTrigger, string[]> = {
   event_completed: ['first_event_month'],
   streak_updated: ['streak_7', 'streak_30'],
   share_click: ['share_impact'],
+  // NBKC Civic Actions
+  civic_action: ['civic_litter_pickup', 'civic_adopt_sapling', 'civic_waste_pledge', 'civic_water_conservation'],
 };
 
 // ---------------------------------------------------------------------------

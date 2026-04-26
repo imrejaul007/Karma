@@ -57,10 +57,11 @@ function getGamificationQueue(): Queue {
 export interface KarmaAwardedEvent {
   userId: string;
   karmaAmount: number;
-  eventType: 'karma.awarded';
+  eventType: 'karma.awarded' | 'badge_earned' | 'civic_mission';
   eventId: string;
   newActiveKarma?: number;
   newLevel?: string;
+  source?: string;
 }
 
 // ── Emit function ────────────────────────────────────────────────────────────

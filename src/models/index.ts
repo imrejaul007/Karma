@@ -40,6 +40,23 @@ export type { CorporatePartnerDocument, ICorporatePartner, CorporatePartnerTier,
 export { CsrAllocation } from './CsrAllocation';
 export type { CsrAllocationDocument, ICsRAllocation, CsrAllocationStatus } from './CsrAllocation';
 
+export { NBKCMembership } from './NBKCMembership';
+export type { NBKCMembershipDocument, NBKCMembershipModel, INBKCMembership, NBKCMembershipTier } from './NBKCMembership';
+
+export { GreenScoreProfile } from './GreenScoreProfile';
+export type { GreenScoreProfileDocument, IGreenScoreProfile, IGreenAction, GreenActionType } from './GreenScoreProfile';
+
+export { CivicMission, CivicMissionEnrollment } from './CivicMission';
+export type {
+  CivicMissionDocument,
+  CivicMissionEnrollmentDocument,
+  ICivicMission,
+  ICivicMissionEnrollment,
+  CivicMissionCategory,
+  CivicMissionStatus,
+  CivicMissionDifficulty,
+} from './CivicMission';
+
 // Re-export leaderboard types for convenience
 export type {
   LeaderboardScope,

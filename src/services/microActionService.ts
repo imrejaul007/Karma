@@ -115,6 +115,39 @@ export const MICRO_ACTIONS_REGISTRY: MicroActionDefinition[] = [
     karmaBonus: 50,
     icon: 'flame',
   },
+  // ── NBKC Civic Actions ────────────────────────────────────────────────────────
+  {
+    actionKey: 'civic_litter_pickup',
+    actionType: 'civic',
+    name: 'Pick Up Litter',
+    description: 'Pick up litter in your neighborhood and dispose properly',
+    karmaBonus: 5,
+    icon: 'trash-2',
+  },
+  {
+    actionKey: 'civic_adopt_sapling',
+    actionType: 'civic',
+    name: 'Adopt a Sapling',
+    description: 'Plant or adopt a sapling and commit to caring for it',
+    karmaBonus: 15,
+    icon: 'leaf',
+  },
+  {
+    actionKey: 'civic_waste_pledge',
+    actionType: 'civic',
+    name: 'Waste Segregation Pledge',
+    description: 'Commit to proper waste segregation at home for 7 days',
+    karmaBonus: 10,
+    icon: 'recycle',
+  },
+  {
+    actionKey: 'civic_water_conservation',
+    actionType: 'civic',
+    name: 'Water Conservation Day',
+    description: 'Track and reduce water usage for a day',
+    karmaBonus: 8,
+    icon: 'droplet',
+  },
 ];
 
 // Action lookup map for O(1) access
@@ -163,16 +196,19 @@ export async function getAvailableActions(userId: string): Promise<MicroActionDe
   }).lean();
 
   const completedKeys = new Set<string>(
-    completedToday.map((a) => a.actionKey.split('_')[0]), // Extract base key
+    completedToday.map((a) => {
+      // actionKey format: {baseKey}_{YYYY-MM-DD} (date uses hyphens, not underscores)
+      // Strip the trailing date suffix by removing the last 11 chars (underscore + 10-char date)
+      const last11 = a.actionKey.slice(-11);
+      if (last11.startsWith('_') && /\d{4}-\d{2}-\d{2}/.test(last11.slice(1))) {
+        return a.actionKey.slice(0, -11);
+      }
+      return a.actionKey;
+    }),
   );
 
   // Filter out actions that have been completed today
-  // Note: streak actions have suffixes (_7, _30) so we check base key match
-  return MICRO_ACTIONS_REGISTRY.filter((action) => {
-    const baseKey = action.actionKey.split('_').slice(0, -1).join('_'); // Remove date suffix if any
-    const baseActionKey = action.actionKey.split('_')[0]; // For checking completed keys
-    return !completedToday.some((a) => a.actionKey === action.actionKey || a.actionKey.startsWith(baseActionKey + '_'));
-  });
+  return MICRO_ACTIONS_REGISTRY.filter((action) => !completedKeys.has(action.actionKey));
 }
 
 /**

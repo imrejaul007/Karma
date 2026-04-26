@@ -22,6 +22,7 @@ import eventRoutes from './routes/eventRoutes';
 import walletRoutes from './routes/walletRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import notificationRoutes from './routes/notificationRoutes';
+import civicRoutes from './routes/civicRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
 import { closeGamificationBridge } from './utils/gamificationBridge.js';
 import { initScoreRankWorker } from './workers/scoreRankWorker';
@@ -132,6 +133,7 @@ app.use('/api/karma', eventRoutes);
 app.use('/api/karma', walletRoutes);
 app.use('/api/karma', bookingRoutes);
 app.use('/api/karma', notificationRoutes);
+app.use('/api/karma/civic-corps', civicRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────────────────
 

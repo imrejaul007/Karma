@@ -113,12 +113,12 @@ describe('getDailyActionKey', () => {
 // ─── getAvailableActions Tests ─────────────────────────────────────────────────
 
 describe('getAvailableActions', () => {
-  it('returns all 8 actions for a new user with no completions', async () => {
+  it('returns all 12 actions for a new user with no completions', async () => {
     const userId = createMockUserId();
 
     const available = await getAvailableActions(userId);
 
-    expect(available).toHaveLength(8);
+    expect(available).toHaveLength(12);
     expect(available.map((a) => a.actionKey)).toContain('share_impact');
     expect(available.map((a) => a.actionKey)).toContain('daily_checkin');
     expect(available.map((a) => a.actionKey)).toContain('refer_friend');
@@ -127,6 +127,10 @@ describe('getAvailableActions', () => {
     expect(available.map((a) => a.actionKey)).toContain('first_event_month');
     expect(available.map((a) => a.actionKey)).toContain('streak_7');
     expect(available.map((a) => a.actionKey)).toContain('streak_30');
+    expect(available.map((a) => a.actionKey)).toContain('civic_litter_pickup');
+    expect(available.map((a) => a.actionKey)).toContain('civic_adopt_sapling');
+    expect(available.map((a) => a.actionKey)).toContain('civic_waste_pledge');
+    expect(available.map((a) => a.actionKey)).toContain('civic_water_conservation');
   });
 
   it('filters out already-completed actions', async () => {
@@ -144,7 +148,7 @@ describe('getAvailableActions', () => {
 
     const available = await getAvailableActions(userId);
 
-    expect(available).toHaveLength(7);
+    expect(available).toHaveLength(11);
     expect(available.map((a) => a.actionKey)).not.toContain('daily_checkin');
     expect(available.map((a) => a.actionKey)).toContain('share_impact');
   });
@@ -166,7 +170,7 @@ describe('getAvailableActions', () => {
 
     const available = await getAvailableActions(userId);
 
-    expect(available).toHaveLength(5);
+    expect(available).toHaveLength(9);
     expect(available.map((a) => a.actionKey)).not.toContain('daily_checkin');
     expect(available.map((a) => a.actionKey)).not.toContain('share_impact');
     expect(available.map((a) => a.actionKey)).not.toContain('join_discord');
@@ -175,15 +179,15 @@ describe('getAvailableActions', () => {
   it('returns all actions for invalid userId', async () => {
     const available = await getAvailableActions('invalid-user-id');
 
-    expect(available).toHaveLength(8);
+    expect(available).toHaveLength(12);
   });
 
   it('returns all actions for null/undefined userId', async () => {
     const availableNull = await getAvailableActions(null as any);
     const availableUndefined = await getAvailableActions(undefined as any);
 
-    expect(availableNull).toHaveLength(8);
-    expect(availableUndefined).toHaveLength(8);
+    expect(availableNull).toHaveLength(12);
+    expect(availableUndefined).toHaveLength(12);
   });
 });
 
@@ -195,7 +199,7 @@ describe('getUserActionStatus', () => {
 
     const status = await getUserActionStatus(userId);
 
-    expect(status).toHaveLength(8);
+    expect(status).toHaveLength(12);
     status.forEach((s) => {
       expect(s.completed).toBe(false);
       expect(s.completedAt).toBeUndefined();
@@ -232,7 +236,7 @@ describe('getUserActionStatus', () => {
   it('returns empty status for invalid userId', async () => {
     const status = await getUserActionStatus('invalid-id');
 
-    expect(status).toHaveLength(8);
+    expect(status).toHaveLength(12);
     status.forEach((s) => expect(s.completed).toBe(false));
   });
 });
@@ -430,11 +434,11 @@ describe('isDailyComplete', () => {
     expect(isComplete).toBe(false);
   });
 
-  it('would return true if all 8 actions were completed', async () => {
+  it('would return true if all 12 actions were completed', async () => {
     const userId = createMockUserId();
     const today = new Date().toISOString().split('T')[0];
 
-    // Complete all 8 actions
+    // Complete all 12 actions
     for (const action of MICRO_ACTIONS_REGISTRY) {
       await MicroAction.create({
         userId: new mongoose.Types.ObjectId(userId),
@@ -580,8 +584,8 @@ describe('MicroActionEngine', () => {
 // ─── MICRO_ACTIONS_REGISTRY Tests ─────────────────────────────────────────────
 
 describe('MICRO_ACTIONS_REGISTRY', () => {
-  it('contains exactly 8 actions', () => {
-    expect(MICRO_ACTIONS_REGISTRY).toHaveLength(8);
+  it('contains exactly 12 actions', () => {
+    expect(MICRO_ACTIONS_REGISTRY).toHaveLength(12);
   });
 
   it('each action has required fields', () => {

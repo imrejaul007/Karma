@@ -18,7 +18,8 @@ export type MicroActionType =
   | 'profile'
   | 'community'
   | 'event'
-  | 'streak';
+  | 'streak'
+  | 'civic';
 
 export interface IMicroAction {
   userId: mongoose.Types.ObjectId;
@@ -43,7 +44,7 @@ const MicroActionSchema = new Schema<MicroActionDocument>(
     },
     actionType: {
       type: String,
-      enum: ['share', 'checkin', 'referral', 'profile', 'community', 'event', 'streak'] as MicroActionType[],
+      enum: ['share', 'checkin', 'referral', 'profile', 'community', 'event', 'streak', 'civic'] as MicroActionType[],
       required: true,
     },
     actionKey: {

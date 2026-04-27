@@ -13,12 +13,8 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": ["jest", "node"],
-    "baseUrl": ".",
-    "paths": {
-      "rez-shared": ["../rez-shared/src"],
-      "rez-shared/*": ["../rez-shared/src/*"]
-    }
+    "types": ["node"],
+    "baseUrl": "."
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/__tests__"]

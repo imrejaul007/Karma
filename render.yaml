@@ -1,19 +1,11 @@
 # render.yaml — Karma by ReZ Service Blueprint
 # Deploy: render blueprint create (CLI) or push to GitHub + link on Render dashboard
 #
-# Required Render Environment Variables (set in Render dashboard > Service > Environment):
-#   MONGODB_URI        — MongoDB connection string (use Render MongoDB add-on)
-#   REDIS_URL          — Redis connection URL (use Render Redis add-on)
-#   JWT_SECRET         — Min 32 chars. Shared with other ReZ services.
-#   INTERNAL_SERVICE_TOKEN — Service-to-service auth token (min 16 chars)
-#   AUTH_SERVICE_URL   — URL of ReZ Auth service (e.g. https://rez-auth-service.onrender.com)
-#   WALLET_SERVICE_URL — URL of ReZ Wallet service
-#   MERCHANT_SERVICE_URL — URL of ReZ Merchant service
-#
-# Optional (with defaults):
-#   BATCH_CRON_SCHEDULE  — Default: 59 23 * * 0 (Sunday 23:59)
-#   CORS_ORIGIN          — Comma-separated allowed origins
-#   TRUST_PROXY_HOPS     — Default: 1 (Render's LB uses 1 hop)
+# REQUIRED — set in Render dashboard > Service > Environment (not in this file):
+#   MONGODB_URI              — karma MongoDB Atlas cluster
+#   JWT_SECRET               — shared with other ReZ services (min 32 chars)
+#   INTERNAL_SERVICE_TOKEN   — shared across all services (min 16 chars)
+#   FCM_SERVER_KEY           — Firebase Cloud Messaging (optional for push)
 
 services:
   - type: web
@@ -34,6 +26,18 @@ services:
         value: '3009'
       - key: TRUST_PROXY_HOPS
         value: '1'
+      - key: REDIS_URL
+        sync: false
+      - key: AUTH_SERVICE_URL
+        sync: false
+      - key: WALLET_SERVICE_URL
+        sync: false
+      - key: MERCHANT_SERVICE_URL
+        sync: false
+      - key: BATCH_CRON_SCHEDULE
+        value: '59 23 * * 0'
+      - key: CORS_ORIGIN
+        value: 'https://rez.money,https://app.rez.money'
       - key: RATE_LIMIT_WINDOW_MS
         value: '900000'
       - key: RATE_LIMIT_MAX

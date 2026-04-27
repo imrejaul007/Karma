@@ -1,0 +1,40 @@
+# render.yaml — Karma by ReZ Service Blueprint
+# Deploy: render blueprint create (CLI) or push to GitHub + link on Render dashboard
+#
+# Required Render Environment Variables (set in Render dashboard > Service > Environment):
+#   MONGODB_URI        — MongoDB connection string (use Render MongoDB add-on)
+#   REDIS_URL          — Redis connection URL (use Render Redis add-on)
+#   JWT_SECRET         — Min 32 chars. Shared with other ReZ services.
+#   INTERNAL_SERVICE_TOKEN — Service-to-service auth token (min 16 chars)
+#   AUTH_SERVICE_URL   — URL of ReZ Auth service (e.g. https://rez-auth-service.onrender.com)
+#   WALLET_SERVICE_URL — URL of ReZ Wallet service
+#   MERCHANT_SERVICE_URL — URL of ReZ Merchant service
+#
+# Optional (with defaults):
+#   BATCH_CRON_SCHEDULE  — Default: 59 23 * * 0 (Sunday 23:59)
+#   CORS_ORIGIN          — Comma-separated allowed origins
+#   TRUST_PROXY_HOPS     — Default: 1 (Render's LB uses 1 hop)
+
+services:
+  - type: web
+    name: rez-karma-service
+    env: node
+    region: singapore
+    plan: free
+    nodeVersion: '20'
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health/live
+    healthCheckInterval: 30
+    healthCheckThreshold: 3
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '3009'
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      - key: RATE_LIMIT_WINDOW_MS
+        value: '900000'
+      - key: RATE_LIMIT_MAX
+        value: '100'

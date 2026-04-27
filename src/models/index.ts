@@ -57,6 +57,12 @@ export type {
   CivicMissionDifficulty,
 } from './CivicMission';
 
+export { Intent } from './Intent';
+export type {
+  IIntent,
+  IIntentSignal,
+} from './Intent';
+
 // Re-export leaderboard types for convenience
 export type {
   LeaderboardScope,

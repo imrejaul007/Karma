@@ -19,6 +19,7 @@ import mongoose from 'mongoose';
 import { KarmaProfile, EarnRecord } from '../models/index.js';
 import { computeKarmaScore, getBandMetadata } from '../engines/karmaScoreEngine.js';
 import { getConversionRate } from '../engines/karmaEngine.js';
+import { startOfDayIST } from '../utils/istTime.js';
 import { logger } from '../config/logger.js';
 import type { KarmaLevel as Level } from '@rez/shared-types';
 
@@ -222,11 +223,11 @@ function calculateStreakData(activityHistory: Date[]): ImpactResumeStreakData {
 
   // Sort activity dates (most recent first)
   const sortedDates = activityHistory
-    .map((d) => new Date(d).setHours(0, 0, 0, 0))
-    .sort((a, b) => (b as number) - (a as number));
+    .map((d) => startOfDayIST(new Date(d)).getTime())
+    .sort((a, b) => b - a);
 
-  const uniqueDates = [...new Set(sortedDates.map((d) => d as number))];
-  const today = new Date().setHours(0, 0, 0, 0);
+  const uniqueDates = [...new Set(sortedDates)];
+  const today = startOfDayIST().getTime();
   const oneDayMs = 24 * 60 * 60 * 1000;
 
   let currentStreak = 0;

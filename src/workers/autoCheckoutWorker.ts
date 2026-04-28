@@ -305,6 +305,15 @@ export function startAutoCheckoutWorker(onComplete?: (result: AutoCheckoutResult
   }
 
   cronJob = new CronJob('0 * * * *', async () => {
+    // CRON-003 FIX: Add distributed lock to prevent duplicate execution in multi-instance deployments.
+    const LOCK_KEY = 'rez-karma:auto-checkout-lock';
+    const LOCK_TTL = 300; // 5 minutes — longer than the expected job runtime
+    const lockAcquired = await redis.set(LOCK_KEY, 'locked', 'EX', LOCK_TTL, 'NX');
+    if (!lockAcquired) {
+      logger.info('[AutoCheckoutWorker] Skipped — another instance holds the lock');
+      return;
+    }
+
     logger.info('[AutoCheckoutWorker] Starting hourly scan...');
     try {
       const result = await processForgottenCheckouts();
@@ -316,6 +325,9 @@ export function startAutoCheckoutWorker(onComplete?: (result: AutoCheckoutResult
       // async callbacks — unhandled rejections from processForgottenCheckouts() would crash
       // the worker process without this catch block.
       logger.error('[AutoCheckoutWorker] Unhandled error in cron callback', { error: err });
+    } finally {
+      // CRON-003 FIX: Always release the distributed lock.
+      await redis.del(LOCK_KEY).catch(() => {});
     }
   });
 

@@ -12,6 +12,7 @@ import { KarmaProfile } from '../models/KarmaProfile.js';
 import { EarnRecord } from '../models/EarnRecord.js';
 import { redis } from '../config/redis.js';
 import { logger } from '../config/logger.js';
+import { startOfDayIST } from '../utils/istTime.js';
 import type { KarmaProfileDocument } from '../models/KarmaProfile.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -60,14 +61,12 @@ function getPeriodBoundary(period: LeaderboardPeriod): Date | null {
   if (period === 'weekly') {
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-    return startOfWeek;
+    return startOfDayIST(startOfWeek);
   }
 
   if (period === 'monthly') {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    return startOfMonth;
+    return startOfDayIST(startOfMonth);
   }
 
   return null;

@@ -24,6 +24,7 @@ import {
   calculateRelativeRankScore,
 } from '../engines/karmaScoreEngine.js';
 import { applyStabilityBuffer } from '../utils/scoreStabilityBuffer.js';
+import { startOfDayIST } from '../utils/istTime.js';
 import type { KarmaProfileDocument } from '../models/KarmaProfile.js';
 
 const RANKINGS_KEY = 'karma:rankings:activeKarma';
@@ -106,8 +107,7 @@ async function computePercentiles(): Promise<void> {
 }
 
 async function snapshotDailyScores(): Promise<void> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = startOfDayIST();
 
   let cursor = 0;
   const batchSize = 200;

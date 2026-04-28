@@ -13,6 +13,7 @@
 import { KarmaProfile } from '../models/KarmaProfile.js';
 import { redis } from '../config/redis.js';
 import { logger } from '../config/logger.js';
+import { startOfDayIST } from '../utils/istTime.js';
 import type { KarmaProfileDocument } from '../models/KarmaProfile.js';
 
 // ─── Component limits ───────────────────────────────────────────────────────────
@@ -157,10 +158,9 @@ export async function calculateMomentumScore(userId: string, profile: KarmaProfi
   const now = new Date();
   const thisWeekStart = new Date(now);
   thisWeekStart.setDate(now.getDate() - now.getDay());
-  thisWeekStart.setHours(0, 0, 0, 0);
-
-  const lastWeekStart = new Date(thisWeekStart);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const mondayIST = startOfDayIST(thisWeekStart);
+  const mondayStart = new Date(mondayIST.getTime());
+  const lastWeekStart = new Date(mondayIST.getTime() - 7 * 86400000);
 
   // Get weekly karma from activity history
   const activity30d = (profile.activityHistory ?? []).filter(d => {
@@ -169,10 +169,10 @@ export async function calculateMomentumScore(userId: string, profile: KarmaProfi
   });
 
   // Count activities in current week vs last week as proxy
-  const thisWeekCount = activity30d.filter(d => new Date(d) >= thisWeekStart).length;
+  const thisWeekCount = activity30d.filter(d => new Date(d) >= mondayStart).length;
   const lastWeekCount = activity30d.filter(d => {
     const date = new Date(d);
-    return date >= lastWeekStart && date < thisWeekStart;
+    return date >= lastWeekStart && date < mondayStart;
   }).length;
 
   // Base score from this week's activity

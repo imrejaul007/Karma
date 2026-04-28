@@ -12,6 +12,7 @@ import {
   notifyBadgeEarned,
   notifyMissionComplete,
 } from './notificationService.js';
+import { trackRewardEarned } from './intentCapture.service.js';
 
 // ── Badge Definitions ───────────────────────────────────────────────────────
 
@@ -161,6 +162,9 @@ export async function evaluateBadges(userId: string): Promise<string[]> {
 
         newlyEarned.push(badgeId);
         logger.info('[MissionEngine] Badge awarded', { userId, badgeId });
+
+        // Track intent — reward earned (wishlist)
+        trackRewardEarned(userId, badgeId, def.name);
 
         // Send push notification for badge earned
         notifyBadgeEarned(userId, badgeId, def.name, def.icon).catch((err) => {

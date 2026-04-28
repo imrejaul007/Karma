@@ -1,235 +1,116 @@
 /**
- * RTMN Commerce Memory: Intent Capture Service for Karma
- * Captures loyalty/rewards intents for cross-app intelligence
+ * ReZ Mind Intent Capture Service — Karma
+ * Captures user intent signals for the ReZ Mind intent graph.
+ * Events: activity completed, reward earned, redemption started, points redeemed.
  */
 
-import mongoose from 'mongoose';
-import { Intent } from '../models';
-import { logger } from '../config/logger';
+const INTENT_CAPTURE_URL = process.env.INTENT_CAPTURE_URL || '';
 
-const BASE_CONFIDENCE = 0.3;
-
-const SIGNAL_WEIGHTS: Record<string, number> = {
-  points_earned: 0.15,
-  points_redeemed: 0.20,
-  reward_viewed: 0.10,
-  reward_redeemed: 0.40,
-  tier_upgraded: 0.35,
-  referral_sent: 0.25,
-  spin_played: 0.15,
-};
-
-const APP_TYPE = 'loyalty';
-
-// ── Intent Types ─────────────────────────────────────────────────────────────
-
-export interface CaptureRewardViewParams {
+export interface IntentCaptureParams {
   userId: string;
-  rewardId: string;
-  rewardName: string;
-  pointsCost?: number;
-}
-
-export interface CapturePointsEarnedParams {
-  userId: string;
-  source: string;
-  points: number;
-  transactionId: string;
-}
-
-export interface CaptureRedemptionParams {
-  userId: string;
-  rewardId: string;
-  pointsSpent: number;
-  orderId?: string;
-}
-
-export interface CaptureReferralParams {
-  userId: string;
-  referralCode: string;
-  referredUserId?: string;
-}
-
-// ── Capture Functions ────────────────────────────────────────────────────────
-
-/**
- * Capture reward view intent
- */
-export async function captureRewardView(params: CaptureRewardViewParams): Promise<void> {
-  try {
-    const intentKey = `reward_view_${params.rewardId}`;
-
-    await upsertIntent({
-      userId: params.userId,
-      appType: APP_TYPE,
-      category: 'GENERAL',
-      intentKey,
-      eventType: 'reward_viewed',
-      metadata: {
-        rewardId: params.rewardId,
-        rewardName: params.rewardName,
-        pointsCost: params.pointsCost,
-        type: 'reward_view',
-      },
-    });
-  } catch (error) {
-    logger.error('[IntentCapture] Failed to capture reward view', { error, params });
-  }
-}
-
-/**
- * Capture points earned intent
- */
-export async function capturePointsEarned(params: CapturePointsEarnedParams): Promise<void> {
-  try {
-    const intentKey = `points_earned_${params.source}_${params.transactionId}`;
-
-    await upsertIntent({
-      userId: params.userId,
-      appType: APP_TYPE,
-      category: 'GENERAL',
-      intentKey,
-      eventType: 'points_earned',
-      metadata: {
-        source: params.source,
-        points: params.points,
-        transactionId: params.transactionId,
-        type: 'points_earned',
-      },
-    });
-  } catch (error) {
-    logger.error('[IntentCapture] Failed to capture points earned', { error, params });
-  }
-}
-
-/**
- * Capture reward redemption intent
- */
-export async function captureRewardRedemption(params: CaptureRedemptionParams): Promise<void> {
-  try {
-    const intentKey = `reward_redeemed_${params.rewardId}`;
-
-    await upsertIntent({
-      userId: params.userId,
-      appType: APP_TYPE,
-      category: 'GENERAL',
-      intentKey,
-      eventType: 'reward_redeemed',
-      metadata: {
-        rewardId: params.rewardId,
-        pointsSpent: params.pointsSpent,
-        orderId: params.orderId,
-        type: 'reward_redeemed',
-      },
-    });
-  } catch (error) {
-    logger.error('[IntentCapture] Failed to capture redemption', { error, params });
-  }
-}
-
-/**
- * Capture referral intent
- */
-export async function captureReferral(params: CaptureReferralParams): Promise<void> {
-  try {
-    const intentKey = `referral_${params.referralCode}`;
-
-    await upsertIntent({
-      userId: params.userId,
-      appType: APP_TYPE,
-      category: 'GENERAL',
-      intentKey,
-      eventType: 'referral_sent',
-      metadata: {
-        referralCode: params.referralCode,
-        referredUserId: params.referredUserId,
-        type: 'referral',
-      },
-    });
-  } catch (error) {
-    logger.error('[IntentCapture] Failed to capture referral', { error, params });
-  }
-}
-
-// ── Internal Helpers ─────────────────────────────────────────────────────────
-
-interface UpsertIntentParams {
-  userId: string;
-  appType: string;
+  eventType: string;
   category: string;
   intentKey: string;
-  eventType: string;
   metadata?: Record<string, unknown>;
+  appType: string;
 }
 
-async function upsertIntent(params: UpsertIntentParams): Promise<void> {
-  const signalWeight = SIGNAL_WEIGHTS[params.eventType] || 0.1;
-
+export async function captureIntent(params: IntentCaptureParams): Promise<void> {
+  if (!INTENT_CAPTURE_URL) return;
   try {
-    const existingIntent = await Intent.findOne({
-      userId: params.userId,
-      appType: params.appType,
-      intentKey: params.intentKey,
+    await fetch(`${INTENT_CAPTURE_URL}/api/intent/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...params }),
     });
-
-    if (existingIntent) {
-      const recencyMultiplier = calculateRecencyMultiplier(existingIntent.lastSeenAt);
-      const newConfidence = Math.min(
-        1.0,
-        Math.max(0.0, existingIntent.confidence + signalWeight * recencyMultiplier)
-      );
-
-      await Intent.updateOne(
-        { _id: existingIntent._id },
-        {
-          confidence: newConfidence,
-          lastSeenAt: new Date(),
-          $push: {
-            signals: {
-              $each: [{
-                eventType: params.eventType,
-                weight: signalWeight,
-                data: params.metadata,
-                capturedAt: new Date(),
-              }],
-              $slice: -50,
-            },
-          },
-        }
-      );
-    } else {
-      await Intent.create({
-        userId: params.userId,
-        appType: params.appType,
-        category: params.category,
-        intentKey: params.intentKey,
-        confidence: BASE_CONFIDENCE + signalWeight,
-        status: 'ACTIVE',
-        firstSeenAt: new Date(),
-        lastSeenAt: new Date(),
-        signals: [{
-          eventType: params.eventType,
-          weight: signalWeight,
-          data: params.metadata,
-          capturedAt: new Date(),
-        }],
-      });
-    }
-  } catch (error) {
-    logger.debug('[IntentCapture] Upsert failed (table may not exist)', { error });
+  } catch {
+    // Silently ignore errors — intent capture must not block business logic
   }
 }
 
-function calculateRecencyMultiplier(lastSeenAt: Date): number {
-  const daysSince = (Date.now() - lastSeenAt.getTime()) / (1000 * 60 * 60 * 24);
-  return Math.exp(-daysSince / 30);
+// ── Event-to-Intent Map ────────────────────────────────────────────────────────
+
+const EVENT_TO_INTENT_MAP: Record<string, { eventType: string; category: string; intentKey: string }> = {
+  // Activity completed → view (confidence 0.25)
+  activity_completed: {
+    eventType: 'view',
+    category: 'GENERAL',
+    intentKey: 'activity_completed',
+  },
+  // Reward earned → wishlist (confidence 0.30)
+  reward_earned: {
+    eventType: 'wishlist',
+    category: 'GENERAL',
+    intentKey: 'reward_earned',
+  },
+  // Redemption started → checkout_start (confidence 0.60)
+  redemption_started: {
+    eventType: 'checkout_start',
+    category: 'GENERAL',
+    intentKey: 'redemption_started',
+  },
+  // Points redeemed → fulfilled (confidence 1.0)
+  points_redeemed: {
+    eventType: 'fulfilled',
+    category: 'GENERAL',
+    intentKey: 'points_redeemed',
+  },
+};
+
+export function track(params: {
+  userId: string;
+  event: string;
+  appType: string;
+  intentKey: string;
+  properties?: Record<string, unknown>;
+}): void {
+  const config = EVENT_TO_INTENT_MAP[params.event];
+  if (!config || !params.userId) return;
+  captureIntent({ ...params, ...config }).catch(() => {});
 }
 
-// ── Export ─────────────────────────────────────────────────────────────────
+// ── Domain-Specific Capture Helpers ────────────────────────────────────────────
 
-export const intentCaptureService = {
-  captureRewardView,
-  capturePointsEarned,
-  captureRewardRedemption,
-  captureReferral,
-};
+/**
+ * Track activity completed (karma event verified).
+ * Called after earn record is created.
+ */
+export function trackActivityCompleted(userId: string, eventId: string): void {
+  track({ userId, event: 'activity_completed', appType: 'karma', intentKey: `activity_${eventId}` });
+}
+
+/**
+ * Track reward/perk earned (e.g. badge, perk unlocked).
+ * Called when a perk is claimed or reward is granted.
+ */
+export function trackRewardEarned(userId: string, rewardId: string, rewardName: string): void {
+  track({
+    userId,
+    event: 'reward_earned',
+    appType: 'karma',
+    intentKey: `reward_${rewardId}`,
+    properties: { rewardName },
+  });
+}
+
+/**
+ * Track redemption process started (checkout_start).
+ * Called when a user initiates redeeming karma points for a reward/perk.
+ */
+export function trackRedemptionStarted(userId: string, perkId: string): void {
+  track({ userId, event: 'redemption_started', appType: 'karma', intentKey: `redemption_${perkId}` });
+}
+
+/**
+ * Track points redeemed (fulfilled).
+ * Called after batch conversion credits coins to user wallet.
+ */
+export function trackPointsRedeemed(userId: string, recordId: string, karmaAmount: number): void {
+  track({
+    userId,
+    event: 'points_redeemed',
+    appType: 'karma',
+    intentKey: `points_${recordId}`,
+    properties: { karmaAmount },
+  });
+}

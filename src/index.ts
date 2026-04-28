@@ -23,6 +23,7 @@ import walletRoutes from './routes/walletRoutes';
 import bookingRoutes from './routes/bookingRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import civicRoutes from './routes/civicRoutes';
+import perkRoutes from './routes/perkRoutes';
 import { startCoinEventSubscriber, stopCoinEventSubscriber } from './workers/coinEventSubscriber';
 import { closeGamificationBridge } from './utils/gamificationBridge.js';
 import { initScoreRankWorker } from './workers/scoreRankWorker';
@@ -32,7 +33,11 @@ import { seedCommunities } from './config/communitySeed.js';
 const app = express();
 // Behind Render LB + CF — trust N hops so per-IP rate limiters key on real client IP.
 // See MASTER-PLAN-2026-04-19 P1 (trust proxy fleet-wide).
-app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
+const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 1) || 1;
+if (proxyHops < 0 || proxyHops > 10) {
+  logger.warn('[CONFIG] TRUST_PROXY_HOPS outside safe range (0-10), capping to 10');
+}
+app.set('trust proxy', Math.min(Math.max(proxyHops, 0), 10));
 
 // W3C traceparent propagation
 app.use((req, _res, next) => {
@@ -134,6 +139,7 @@ app.use('/api/karma', walletRoutes);
 app.use('/api/karma', bookingRoutes);
 app.use('/api/karma', notificationRoutes);
 app.use('/api/karma/civic-corps', civicRoutes);
+app.use('/api/karma', perkRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────────────────
 

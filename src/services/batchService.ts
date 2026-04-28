@@ -16,6 +16,7 @@ import { Batch } from '../models/Batch.js';
 import { CSRPool } from '../models/CSRPool.js';
 import { KarmaProfile } from '../models/KarmaProfile.js';
 import { creditUserWallet } from './walletIntegration.js';
+import { trackPointsRedeemed } from './intentCapture.service.js';
 import { logAudit } from './auditService.js';
 import { WEEKLY_COIN_CAP } from '../engines/karmaEngine.js';
 import { createServiceLogger } from '../config/logger.js';
@@ -502,6 +503,9 @@ export async function executeBatch(batchId: string, adminId: string): Promise<Ex
       record.convertedBy = new Types.ObjectId(adminId);
       record.rezCoinsEarned = cappedCoins;
       record.idempotencyKey = idempotencyKey;
+
+      // Track intent — points redeemed (fulfilled)
+      trackPointsRedeemed(record.userId.toString(), recordIdStr, record.karmaEarned);
       await record.save();
 
       // G-KS-B8 FIX: Atomic CSR pool decrement using findOneAndUpdate with a guard condition.

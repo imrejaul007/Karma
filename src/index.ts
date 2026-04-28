@@ -144,8 +144,8 @@ app.use('/api/karma', perkRoutes);
 // ── Global Error Handler ─────────────────────────────────────────────────────
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  const message = err instanceof Error ? err.message : 'Internal server error';
-  logger.error('Unhandled error', { error: message, stack: err instanceof Error ? err.stack : undefined });
+  const message = 'Internal server error';
+  logger.error('Unhandled error', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   res.status(500).json({ success: false, message });
 });
 

@@ -60,7 +60,7 @@ router.post('/join', requireAuth, async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('[CivicRoutes] join error', { error: err.message, userId: req.userId });
     if (err.message.includes('Already a member')) {
-      return res.status(409).json({ success: false, message: err.message });
+      return res.status(409).json({ success: false, message: 'Internal server error' });
     }
     return res.status(500).json({ success: false, message: 'Failed to join civic corps' });
   }
@@ -133,7 +133,7 @@ router.post('/missions/:id/enroll', requireAuth, async (req: Request, res: Respo
   } catch (err: any) {
     logger.error('[CivicRoutes] enroll error', { error: err.message, userId: req.userId });
     if (err.message.includes('not found') || err.message.includes('full')) {
-      return res.status(400).json({ success: false, message: err.message });
+      return res.status(400).json({ success: false, message: 'Internal server error' });
     }
     return res.status(500).json({ success: false, message: 'Failed to enroll' });
   }
@@ -149,7 +149,7 @@ router.post('/missions/:id/checkin', requireAuth, async (req: Request, res: Resp
     return res.json({ success: true, data: result });
   } catch (err: any) {
     logger.error('[CivicRoutes] checkin error', { error: err.message, userId: req.userId });
-    return res.status(400).json({ success: false, message: err.message });
+    return res.status(400).json({ success: false, message: 'Internal server error' });
   }
 });
 
@@ -185,7 +185,7 @@ router.post('/missions/:id/complete', requireAuth, async (req: Request, res: Res
     });
   } catch (err: any) {
     logger.error('[CivicRoutes] complete error', { error: err.message, userId: req.userId });
-    return res.status(400).json({ success: false, message: err.message });
+    return res.status(400).json({ success: false, message: 'Internal server error' });
   }
 });
 

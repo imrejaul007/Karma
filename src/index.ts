@@ -15,6 +15,8 @@ import client from 'prom-client';
 const register = new client.Registry();
 client.collectDefaultMetrics({ register });
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import { openApiSpec } from '@rez/shared/api-docs';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import mongoSanitize from 'express-mongo-sanitize';
@@ -143,6 +145,12 @@ app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 app.get('/metrics', async (_req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());
+});
+
+// ── OpenAPI Documentation ──────────────────────────────────────────────────────
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
+app.get('/api-docs.json', (_req, res) => {
+  res.json(openApiSpec);
 });
 
 // ── Routes ────────────────────────────────────────────────────────────────────

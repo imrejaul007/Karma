@@ -13,7 +13,8 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@rez/shared-types": "github:imrejaul007/shared-types#2.0.0",
+    // SUPPLY CHAIN FIX: Replace GitHub fork with local monorepo path
+    "@rez/shared-types": "file:../packages/shared-types",
     "@types/bcrypt": "^5.0.2",
     "@types/compression": "^1.7.5",
     "@types/cookie-parser": "^1.4.10",

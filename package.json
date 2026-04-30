@@ -1,7 +1,7 @@
 {
   "name": "rez-karma-service",
   "version": "1.0.0",
-  "description": "Karma by ReZ — Impact Economy Platform Backend",
+  "description": "Karma by ReZ \u2014 Impact Economy Platform Backend",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -13,7 +13,6 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@rez/shared": "workspace:*",
     "@sentry/node": "^8.0.0",
     "swagger-ui-express": "^5.0.0",
     "axios": "^1.7.9",
@@ -32,7 +31,7 @@
     "isomorphic-dompurify": "^2.30.0",
     "jsonwebtoken": "^9.0.3",
     "moment": "^2.30.1",
-    "mongoose": "^8.17.2",
+    "mongoose": "^8.8.0",
     "node-cron": "^3.0.3",
     "pdfkit": "^0.18.0",
     "prom-client": "^15.1.0",

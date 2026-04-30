@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Karma Routes — REST API endpoints

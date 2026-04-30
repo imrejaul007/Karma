@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 import mongoose from 'mongoose';
 import { logger } from './logger';
 

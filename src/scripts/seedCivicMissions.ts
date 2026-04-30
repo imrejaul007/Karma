@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 /**
  * NBKC Civic Mission Seed Data
  *

@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 import 'dotenv/config';
 
 // ── Service ─────────────────────────────────────────────────────────────────

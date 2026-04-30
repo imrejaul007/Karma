@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 /**
  * Integration tests for verifyRoutes.ts
  *

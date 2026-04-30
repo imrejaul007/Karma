@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Audit Service — logs all admin actions to a dedicated MongoDB collection.

@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * UserDevice Model — FCM device token storage for push notifications

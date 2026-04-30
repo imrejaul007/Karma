@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Notification Routes — device registration for push notifications

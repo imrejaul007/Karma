@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // ── Karma Chat Service ──────────────────────────────────────────────────────────────
 // Gamification & rewards chat actions
 

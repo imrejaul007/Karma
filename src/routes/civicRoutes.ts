@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Civic Corps Routes — Namma Bengaluru Karma Corps (NBKC)

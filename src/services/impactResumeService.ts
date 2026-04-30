@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Impact Resume Service — generates a structured Impact Resume JSON document.

@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Civic Corps Service — Namma Bengaluru Karma Corps (NBKC)

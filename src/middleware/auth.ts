@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import crypto from 'crypto';

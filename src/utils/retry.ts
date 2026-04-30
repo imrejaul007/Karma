@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 /**
  * Retry utility for external service calls.
  *

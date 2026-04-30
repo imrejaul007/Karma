@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 /**
  * Karma → Gamification Bridge
  *

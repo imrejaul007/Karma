@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import type {

@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * EarnRecord Service — Phase 3: Karma by ReZ

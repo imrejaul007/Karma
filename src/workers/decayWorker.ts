@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-nocheck
 /**
  * Decay Worker — daily cron job for karma decay

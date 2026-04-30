@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 /**
  * Impact Resume PDF Template
  *

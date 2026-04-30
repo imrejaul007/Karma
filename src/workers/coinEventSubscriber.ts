@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-nocheck
 /**
  * Coin Event Subscriber — XS-CRIT-007 Fix

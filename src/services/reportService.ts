@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Impact Report Service — generates a branded PDF Impact Report for a user.

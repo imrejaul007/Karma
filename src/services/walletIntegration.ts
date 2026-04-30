@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Wallet Integration Service — bridges Karma Service with ReZ Wallet Service

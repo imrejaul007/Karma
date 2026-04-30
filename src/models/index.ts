@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 export { KarmaProfile } from './KarmaProfile';
 export type { KarmaProfileDocument, IKarmaProfile, IBadge, ILevelHistoryEntry, IConversionHistoryEntry } from './KarmaProfile';

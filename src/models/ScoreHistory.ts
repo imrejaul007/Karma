@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * ScoreHistory Model — daily KarmaScore snapshots

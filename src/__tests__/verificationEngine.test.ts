@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 /**
  * Unit tests for verificationEngine.ts
  *

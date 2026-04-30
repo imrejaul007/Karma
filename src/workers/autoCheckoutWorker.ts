@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-nocheck
 /**
  * Auto-Checkout Worker — Phase 3: Karma by ReZ

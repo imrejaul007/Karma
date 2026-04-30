@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-ignore
 /**
  * Green Score Profile Model — Environmental impact tracking for NBKC

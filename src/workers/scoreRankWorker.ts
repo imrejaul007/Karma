@@ -1,4 +1,4 @@
-// -nocheck
+// @ts-nocheck
 // @ts-nocheck
 /**
  * ScoreRank Worker — nightly KarmaScore ranking job

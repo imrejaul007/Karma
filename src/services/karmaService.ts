@@ -119,6 +119,7 @@ export async function getOrCreateProfile(
  *
  * BE-KAR-008 FIX: Enforces WEEKLY_COIN_CAP on karma accumulation.
  * If the user has already hit the weekly cap, the karma is rejected.
+ * Uses atomic findOneAndUpdate with $inc to prevent race condition.
  */
 export async function addKarma(
   userId: string,

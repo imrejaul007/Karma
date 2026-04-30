@@ -11,6 +11,7 @@
  */
 import moment from 'moment';
 import { Types } from 'mongoose';
+import { randomUUID } from 'crypto';
 import { EarnRecord } from '../models/EarnRecord.js';
 import { Batch } from '../models/Batch.js';
 import { CSRPool } from '../models/CSRPool.js';
@@ -20,6 +21,7 @@ import { trackPointsRedeemed } from './intentCapture.service.js';
 import { logAudit } from './auditService.js';
 import { WEEKLY_COIN_CAP } from '../engines/karmaEngine.js';
 import { createServiceLogger } from '../config/logger.js';
+import { redis } from '../config/redis.js';
 
 const log = createServiceLogger('batchService');
 
@@ -102,12 +104,30 @@ export interface EarnRecordData {
  * Create weekly batches for all CSR pools with pending earn records.
  * Groups records by csrPoolId and creates one batch per pool.
  *
+ * G-KS-A3/M22 FIX: Uses a Redis distributed lock to prevent concurrent batch creation
+ * from multiple service instances (horizontal scaling).
+ *
  * @returns Array of created Batch documents
  */
 export async function createWeeklyBatch(): Promise<InstanceType<typeof Batch>[]> {
-  const now = new Date();
-  const weekStart = moment(now).subtract(7, 'days').startOf('day').toDate();
-  const weekEnd = moment(now).startOf('day').toDate();
+  // G-KS-A3/M22 FIX: Acquire distributed lock before creating batches.
+  const lockKey = 'batch:create:lock';
+  const lockToken = randomUUID();
+  // Use setnx + expire for atomic-like lock acquisition with TTL.
+  const lockAcquired = await redis.setnx(lockKey, lockToken);
+  if (lockAcquired) {
+    await redis.expire(lockKey, 300); // 5-minute TTL
+  }
+
+  if (!lockAcquired) {
+    log.warn('createWeeklyBatch: another instance is creating batches, skipping');
+    return [];
+  }
+
+  try {
+    const now = new Date();
+    const weekStart = moment(now).subtract(7, 'days').startOf('day').toDate();
+    const weekEnd = moment(now).startOf('day').toDate();
 
   // Aggregate pending records grouped by CSR pool
   const groups = await EarnRecord.aggregate<
@@ -155,6 +175,13 @@ export async function createWeeklyBatch(): Promise<InstanceType<typeof Batch>[]>
   }
 
   return createdBatches;
+  } finally {
+    // G-KS-A3/M22 FIX: Always release the distributed lock.
+    const lockStillHeld = await redis.get(lockKey);
+    if (lockStillHeld === lockToken) {
+      await redis.del(lockKey);
+    }
+  }
 }
 
 /**

@@ -111,10 +111,11 @@ export function getConversionRate(level: string): ConversionRate {
     }
   })();
 
-  // Validate rate is within reasonable bounds
-  if (typeof rate !== 'number' || rate < 0 || rate > 2) {
+  // G-KS-M31 FIX: Conversion rate upper bound is 1 (100%), not 2.
+  // A karma point cannot convert to more than 1 coin.
+  if (typeof rate !== 'number' || rate < 0 || rate > 1) {
     throw new Error(
-      `Invalid conversion rate ${rate} for level ${level}. Must be between 0 and 2.`
+      `Invalid conversion rate ${rate} for level ${level}. Must be between 0 and 1.`
     );
   }
 

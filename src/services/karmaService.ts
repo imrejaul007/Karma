@@ -595,7 +595,8 @@ export async function getKarmaHistory(
       karmaConverted: entry.karmaConverted,
       coinsEarned: entry.coinsEarned,
       rate: entry.rate,
-      batchId: entry.batchId.toString(),
+      // G-KS-H19 FIX: Guard against undefined batchId before calling toString().
+      batchId: entry.batchId?.toString() ?? 'unknown',
       convertedAt: entry.convertedAt,
     }));
 }

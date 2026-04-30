@@ -14,7 +14,8 @@
     "declarationMap": true,
     "sourceMap": true,
     "types": ["node"],
-    "baseUrl": "."
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/__tests__"]

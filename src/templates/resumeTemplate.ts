@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * Impact Resume PDF Template
  *

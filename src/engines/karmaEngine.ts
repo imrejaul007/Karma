@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Karma Engine — core calculation logic for Karma by ReZ

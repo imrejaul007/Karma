@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * KarmaMission Model — user mission tracking

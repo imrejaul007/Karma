@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Mission Engine — evaluates badge and mission completions

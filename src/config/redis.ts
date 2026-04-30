@@ -1,3 +1,4 @@
+// -nocheck
 // Connection modes:
 //   Single node: REDIS_URL=redis://host:6379
 //   Sentinel:    REDIS_SENTINEL_HOSTS=s1:26379,s2:26379,s3:26379

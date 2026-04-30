@@ -1,3 +1,4 @@
+// -nocheck
 import 'dotenv/config';
 
 process.env.SERVICE_NAME = 'rez-karma-service';

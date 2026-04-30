@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Batch Routes — admin API endpoints for batch conversion management

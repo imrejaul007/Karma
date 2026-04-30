@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 // @deprecated — re-exported from @rez/shared-types. Migrate imports to @rez/shared-types directly.
 

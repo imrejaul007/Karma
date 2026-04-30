@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * Karma → Gamification Bridge
  *

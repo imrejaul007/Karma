@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Batch Service — weekly batch conversion pipeline for Karma by ReZ

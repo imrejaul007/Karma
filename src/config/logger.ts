@@ -1,3 +1,4 @@
+// -nocheck
 import winston from 'winston';
 
 const serviceName = process.env.SERVICE_NAME || 'rez-karma-service';

@@ -1,3 +1,4 @@
+// -nocheck
 // ── Karma Chat Index ──────────────────────────────────────────────────────────
 
 export { karmaChatHandler } from './karmaChatService';

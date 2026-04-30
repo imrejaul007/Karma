@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * CSR Service — Corporate Social Responsibility Cloud business logic

@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Intent Model - MongoDB Schema

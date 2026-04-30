@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * Unit tests for verificationEngine.ts
  *

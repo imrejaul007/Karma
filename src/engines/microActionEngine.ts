@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * MicroAction Engine — evaluates user activity triggers

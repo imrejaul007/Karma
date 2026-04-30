@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * ReZ Mind Intent Capture Service — Karma

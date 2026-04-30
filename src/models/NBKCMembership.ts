@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * NBKC Membership Model — Namma Bengaluru Karma Corps

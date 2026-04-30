@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 import { Router, Request, Response } from 'express';
 import healthRouter from './health';

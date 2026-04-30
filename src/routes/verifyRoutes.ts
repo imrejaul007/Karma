@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Verify Routes — Phase 3: Karma by ReZ

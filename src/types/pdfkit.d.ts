@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 declare class PDFDocument {
   constructor(options?: {

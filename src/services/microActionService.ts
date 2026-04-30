@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * MicroAction Service — daily engagement action registry

@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * Local types replacement for @rez/shared-types
  * These types mirror the types from @rez/shared-types

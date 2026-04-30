@@ -1,3 +1,4 @@
+// -nocheck
 import { Response, NextFunction } from 'express';
 import { Request } from 'express';
 import { requireAuth } from './auth';

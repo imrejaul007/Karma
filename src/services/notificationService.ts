@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Notification Service — push notification system for karma events

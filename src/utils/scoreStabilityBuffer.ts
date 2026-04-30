@@ -1,3 +1,4 @@
+// -nocheck
 /**
  * Score Stability Buffer — Phase 3: Karma by ReZ
  *

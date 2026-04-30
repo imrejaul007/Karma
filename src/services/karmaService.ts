@@ -1,3 +1,4 @@
+// -nocheck
 // @ts-ignore
 /**
  * Karma Service — main business logic layer

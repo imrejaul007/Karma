@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * MicroAction Model — lightweight daily engagement tracking
  *

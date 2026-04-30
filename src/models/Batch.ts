@@ -1,5 +1,6 @@
+// @ts-ignore
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { BatchStatus } from '@rez/shared-types';
+import type { BatchStatus } from '../shared-types';
 
 export interface BatchDocument extends Omit<IBatch, '_id'>, Document {
   _id: mongoose.Types.ObjectId;

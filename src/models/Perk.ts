@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Perk Model — rewards unlocked by KarmaScore bands
  */

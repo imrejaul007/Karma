@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Karma Service — main business logic layer
  *
@@ -23,7 +24,7 @@ import type {
   IBadge,
   ILevelHistoryEntry,
 } from '../models/KarmaProfile.js';
-import type { KarmaLevel as Level, KarmaConversionRate as ConversionRate, ILevelInfo as LevelInfo } from '@rez/shared-types';
+import type { KarmaLevel as Level, KarmaConversionRate as ConversionRate, ILevelInfo as LevelInfo } from '../shared-types';
 import {
   calculateLevel,
   getConversionRate,

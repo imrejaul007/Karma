@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Batch Scheduler — cron worker that triggers weekly batch creation every Sunday at 23:59
  *

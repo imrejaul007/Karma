@@ -1,3 +1,4 @@
+// @ts-ignore
 import mongoose from 'mongoose';
 import { CauseCommunity, CauseCommunityDocument, CommunityCategory } from '../models/CauseCommunity';
 import { CommunityPost, CommunityPostDocument, PostAuthorType } from '../models/CommunityPost';

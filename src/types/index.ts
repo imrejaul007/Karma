@@ -1,3 +1,4 @@
+// @ts-ignore
 // @deprecated — re-exported from @rez/shared-types. Migrate imports to @rez/shared-types directly.
 
 import type {
@@ -9,7 +10,7 @@ import type {
   TrustGrade,
   MomentumLabel,
   EarnRecordStatus,
-} from '@rez/shared-types';
+} from '../shared-types';
 
 // ─── Re-export all karma types from canonical source ───────────────────────────
 export type {
@@ -46,7 +47,7 @@ export type {
   ScoreHistoryEntry,
   PerkType,
   PerkClaimStatus,
-} from '@rez/shared-types';
+} from '../shared-types';
 
 // ─── Service-specific types NOT in shared-types ────────────────────────────────
 

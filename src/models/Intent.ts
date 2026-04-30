@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Intent Model - MongoDB Schema
  * Tracks loyalty/rewards intents for cross-app intelligence

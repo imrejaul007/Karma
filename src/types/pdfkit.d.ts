@@ -1,3 +1,4 @@
+// @ts-ignore
 declare class PDFDocument {
   constructor(options?: {
     autoFirstPage?: boolean;

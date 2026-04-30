@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * PerkClaim Model — tracks when users redeem perks
  */

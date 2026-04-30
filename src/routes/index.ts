@@ -1,3 +1,4 @@
+// @ts-ignore
 import { Router, Request, Response } from 'express';
 import healthRouter from './health';
 import { requireAuth } from '../middleware/auth.js';

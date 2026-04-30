@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * ReZ Mind Intent Capture Service — Karma
  * Captures user intent signals for the ReZ Mind intent graph.

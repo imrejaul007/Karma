@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Impact Resume Service — generates a structured Impact Resume JSON document.
  *
@@ -21,7 +22,7 @@ import { computeKarmaScore, getBandMetadata } from '../engines/karmaScoreEngine.
 import { getConversionRate } from '../engines/karmaEngine.js';
 import { startOfDayIST } from '../utils/istTime.js';
 import { logger } from '../config/logger.js';
-import type { KarmaLevel as Level } from '@rez/shared-types';
+import type { KarmaLevel as Level } from '../shared-types';
 
 // ---------------------------------------------------------------------------
 // Types

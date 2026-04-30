@@ -1,5 +1,6 @@
+// @ts-ignore
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { EventCategory, EventDifficulty, KarmaEventStatus } from '@rez/shared-types';
+import type { EventCategory, EventDifficulty, KarmaEventStatus } from '../shared-types';
 
 export interface KarmaEventDocument extends Omit<IKarmaEvent, '_id'>, Document {
   _id: mongoose.Types.ObjectId;

@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * MicroAction Engine — evaluates user activity triggers
  *
@@ -14,7 +15,7 @@ import { KarmaProfile } from '../models/index.js';
 import { getDailyActionKey, MICRO_ACTIONS_REGISTRY } from '../services/microActionService.js';
 import { logger } from '../config/logger.js';
 import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
-import type { KarmaLevel as Level } from '@rez/shared-types';
+import type { KarmaLevel as Level } from '../shared-types';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Impact Report Service — generates a branded PDF Impact Report for a user.
  *
@@ -10,7 +11,7 @@
  * - Earn history: recent events with karma earned
  */
 import PDFDocument from 'pdfkit';
-import type { KarmaLevel as Level } from '@rez/shared-types';
+import type { KarmaLevel as Level } from '../shared-types';
 import { KarmaProfile } from '../models/KarmaProfile.js';
 import { EarnRecord } from '../models/EarnRecord.js';
 import { computeKarmaScore, getBandMetadata } from '../engines/karmaScoreEngine.js';

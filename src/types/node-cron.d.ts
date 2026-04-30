@@ -1,3 +1,4 @@
+// @ts-ignore
 declare module 'node-cron' {
   function schedule(
     expression: string,

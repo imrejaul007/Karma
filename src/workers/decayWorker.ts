@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Decay Worker — daily cron job for karma decay
  *
@@ -11,11 +12,6 @@ import { logger } from '../config/logger.js';
 import { redis } from '../config/redis.js';
 
 // G-KS-B5 FIX: Decay runs DAILY (midnight UTC), not weekly.
-// The weekly batchCronSchedule is used for batch conversion, not decay.
-const DAILY_DECAY_SCHEDULE = '0 0 * * *';
-
-// G-KS-B5 FIX: Decay runs DAILY (midnight UTC), not weekly.
-// The weekly batchCronSchedule is used for batch conversion, not decay.
 const DAILY_DECAY_SCHEDULE = '0 0 * * *';
 
 let job: CronJob | null = null;

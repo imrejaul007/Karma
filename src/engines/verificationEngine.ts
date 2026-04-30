@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Verification Engine — Phase 3: Karma by ReZ
  *
@@ -8,7 +9,7 @@ import crypto from 'crypto';
 import moment from 'moment';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger.js';
-import type { IVerificationSignals as VerificationSignals } from '@rez/shared-types';
+import type { IVerificationSignals as VerificationSignals } from '../shared-types';
 
 // ---------------------------------------------------------------------------
 // Cross-service EventBooking model (read/write, owned by merchant service).

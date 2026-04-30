@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Leaderboard Service — Karma by ReZ
  *

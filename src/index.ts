@@ -141,6 +141,43 @@ app.get('/health', async (_req, res) => {
 
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
+// GET /health/detailed — Comprehensive health check with latency metrics
+app.get('/health/detailed', async (_req, res) => {
+  const checks: Record<string, any> = {};
+  let isHealthy = true;
+
+  // Check MongoDB with latency
+  const mongoStart = Date.now();
+  try {
+    if (mongoose.connection.readyState !== 1) throw new Error('not connected');
+    await mongoose.connection.db?.admin().ping();
+    checks.database = { status: 'up', latencyMs: Date.now() - mongoStart };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    checks.database = { status: 'down', error: msg, latencyMs: Date.now() - mongoStart };
+    isHealthy = false;
+  }
+
+  // Check Redis with latency
+  const redisStart = Date.now();
+  try {
+    await redis.ping();
+    checks.redis = { status: 'up', latencyMs: Date.now() - redisStart };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    checks.redis = { status: 'down', error: msg, latencyMs: Date.now() - redisStart };
+  }
+
+  const overallStatus = isHealthy ? 'healthy' : 'unhealthy';
+  res.status(overallStatus === 'healthy' ? 200 : 503).json({
+    status: overallStatus,
+    timestamp: new Date().toISOString(),
+    version: process.env.SERVICE_VERSION || '1.0.0',
+    uptime: process.uptime(),
+    checks,
+  });
+});
+
 // ── Prometheus Metrics ─────────────────────────────────────────────────────────
 app.get('/metrics', async (_req, res) => {
   res.set('Content-Type', register.contentType);

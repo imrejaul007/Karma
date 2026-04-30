@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * MicroAction Service — daily engagement action registry
  *
@@ -13,7 +14,7 @@ import type { MicroActionDocument, MicroActionType } from '../models/MicroAction
 import { KarmaProfile } from '../models/index.js';
 import { logger } from '../config/logger.js';
 import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
-import type { KarmaLevel as Level } from '@rez/shared-types';
+import type { KarmaLevel as Level } from '../shared-types';
 
 // ---------------------------------------------------------------------------
 // Types

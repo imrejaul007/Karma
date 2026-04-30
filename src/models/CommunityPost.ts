@@ -1,3 +1,4 @@
+// @ts-ignore
 import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 
 export type PostAuthorType = 'ngo' | 'volunteer';

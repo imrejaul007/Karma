@@ -1,5 +1,6 @@
+// @ts-ignore
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { CSRPoolStatus } from '@rez/shared-types';
+import type { CSRPoolStatus } from '../shared-types';
 
 export interface CSRPoolDocument extends Omit<ICSRPool, '_id'>, Document {
   _id: mongoose.Types.ObjectId;

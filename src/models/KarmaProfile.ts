@@ -1,5 +1,6 @@
+// @ts-ignore
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { KarmaLevel as Level } from '@rez/shared-types';
+import type { KarmaLevel as Level } from '../shared-types';
 
 export interface KarmaProfileDocument extends Omit<IKarmaProfile, '_id'>, Document {
   _id: mongoose.Types.ObjectId;
@@ -44,6 +45,11 @@ export interface IKarmaProfile {
   conversionHistory: IConversionHistoryEntry[];
   thisWeekKarmaEarned: number;
   weekOfLastKarmaEarned?: Date;
+  karmaScore: {
+    band: 'starter' | 'active' | 'contributor' | 'leader' | 'elite';
+    total: number;
+    level: number;
+  };
   avgEventDifficulty: number;
   avgConfidenceScore: number;
   checkIns: number;

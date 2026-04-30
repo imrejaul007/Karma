@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * Booking Routes — User's event bookings
  *

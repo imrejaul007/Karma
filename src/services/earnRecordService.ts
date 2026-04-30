@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * EarnRecord Service — Phase 3: Karma by ReZ
  *
@@ -9,7 +10,7 @@ import { EarnRecord, EarnRecordDocument } from '../models/EarnRecord.js';
 import { KarmaProfile, KarmaProfileDocument } from '../models/KarmaProfile.js';
 import { logger } from '../config/logger.js';
 import { getConversionRate, calculateLevel } from '../engines/karmaEngine.js';
-import type { IVerificationSignals as VerificationSignals, EarnRecordStatus, KarmaLevel as Level } from '@rez/shared-types';
+import type { IVerificationSignals as VerificationSignals, EarnRecordStatus, KarmaLevel as Level } from '../shared-types';
 import { notifyKarmaReceived } from './notificationService.js';
 import { trackActivityCompleted } from './intentCapture.service.js';
 

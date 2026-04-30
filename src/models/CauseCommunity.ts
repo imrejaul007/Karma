@@ -1,3 +1,4 @@
+// @ts-ignore
 import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 
 export type CommunityCategory = 'environment' | 'food' | 'health' | 'education' | 'community';

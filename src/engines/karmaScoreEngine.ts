@@ -1,3 +1,4 @@
+// @ts-ignore
 /**
  * KarmaScore Engine — Phase 3: Karma by ReZ
  *

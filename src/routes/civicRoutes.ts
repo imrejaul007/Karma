@@ -57,9 +57,10 @@ router.post('/join', requireAuth, async (req: Request, res: Response) => {
       data: result,
       message: 'Welcome to Namma Bengaluru Karma Corps! Namma City. Namma Karma.',
     });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] join error', { error: err.message, userId: req.userId });
-    if (err.message.includes('Already a member')) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] join error', { error: errorMessage, userId: req.userId });
+    if (errorMessage.includes('Already a member')) {
       return res.status(409).json({ success: false, message: 'Internal server error' });
     }
     return res.status(500).json({ success: false, message: 'Failed to join civic corps' });
@@ -74,8 +75,9 @@ router.get('/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const status = await withRetry(() => getCivicCorpsStatus(req.userId ?? ''));
     return res.json({ success: true, data: status });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] status error', { error: err.message, userId: req.userId });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] status error', { error: errorMessage, userId: req.userId });
     return res.status(500).json({ success: false, message: 'Failed to get status' });
   }
 });
@@ -99,8 +101,9 @@ router.get('/missions', async (req: Request, res: Response) => {
       })
     );
     return res.json({ success: true, data: result });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] list missions error', { error: err.message });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] list missions error', { error: errorMessage });
     return res.status(500).json({ success: false, message: 'Failed to list missions' });
   }
 });
@@ -116,8 +119,9 @@ router.get('/missions/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Mission not found' });
     }
     return res.json({ success: true, data: mission });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] get mission error', { error: err.message });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] get mission error', { error: errorMessage });
     return res.status(500).json({ success: false, message: 'Failed to get mission' });
   }
 });
@@ -130,9 +134,10 @@ router.post('/missions/:id/enroll', requireAuth, async (req: Request, res: Respo
   try {
     const result = await withRetry(() => enrollInMission(req.userId ?? '', req.params.id));
     return res.json({ success: true, data: result });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] enroll error', { error: err.message, userId: req.userId });
-    if (err.message.includes('not found') || err.message.includes('full')) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] enroll error', { error: errorMessage, userId: req.userId });
+    if (errorMessage.includes('not found') || errorMessage.includes('full')) {
       return res.status(400).json({ success: false, message: 'Internal server error' });
     }
     return res.status(500).json({ success: false, message: 'Failed to enroll' });
@@ -147,8 +152,9 @@ router.post('/missions/:id/checkin', requireAuth, async (req: Request, res: Resp
   try {
     const result = await withRetry(() => checkInToMission(req.userId ?? '', req.params.id));
     return res.json({ success: true, data: result });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] checkin error', { error: err.message, userId: req.userId });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] checkin error', { error: errorMessage, userId: req.userId });
     return res.status(400).json({ success: false, message: 'Internal server error' });
   }
 });
@@ -183,8 +189,9 @@ router.post('/missions/:id/complete', requireAuth, async (req: Request, res: Res
       data: result,
       message: 'Mission completed! Your karma and green score have been updated.',
     });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] complete error', { error: err.message, userId: req.userId });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] complete error', { error: errorMessage, userId: req.userId });
     return res.status(400).json({ success: false, message: 'Internal server error' });
   }
 });
@@ -226,8 +233,9 @@ router.post('/green-action', requireAuth, async (req: Request, res: Response) =>
     );
 
     return res.json({ success: true, data: result });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] green action error', { error: err.message, userId: req.userId });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] green action error', { error: errorMessage, userId: req.userId });
     return res.status(500).json({ success: false, message: 'Failed to record action' });
   }
 });
@@ -249,8 +257,9 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
       : await withRetry(() => getGlobalLeaderboard(limitNum));
 
     return res.json({ success: true, data: result });
-  } catch (err: any) {
-    logger.error('[CivicRoutes] leaderboard error', { error: err.message });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.error('[CivicRoutes] leaderboard error', { error: errorMessage });
     return res.status(500).json({ success: false, message: 'Failed to get leaderboard' });
   }
 });

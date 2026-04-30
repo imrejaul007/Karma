@@ -13,6 +13,7 @@ import {
   notifyMissionComplete,
 } from './notificationService.js';
 import { trackRewardEarned } from './intentCapture.service.js';
+import type { IKarmaProfile, IBadge } from '../models/index.js';
 
 // ── Badge Definitions ───────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ export const BADGE_DEFINITIONS: Record<string, {
   name: string;
   icon: string;
   description: string;
-  condition: (profile: any) => boolean;
+  condition: (profile: IKarmaProfile) => boolean;
   karmaBonus?: number;
 }> = {
   FIRST_STEP: {
@@ -139,7 +140,7 @@ export async function evaluateBadges(userId: string): Promise<string[]> {
     const profile = await KarmaProfile.findOne({ userId: new mongoose.Types.ObjectId(userId) }).lean();
     if (!profile) return [];
 
-    const earnedIds = new Set((profile.badges ?? []).map((b: any) => b.id));
+    const earnedIds = new Set((profile.badges ?? []).map((b: IBadge) => b.id));
     const newlyEarned: string[] = [];
 
     for (const [badgeId, def] of Object.entries(BADGE_DEFINITIONS)) {

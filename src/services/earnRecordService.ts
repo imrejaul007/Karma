@@ -133,12 +133,13 @@ export async function createEarnRecord(
 
   try {
     await record.save();
-  } catch (err: any) {
+  } catch (err: unknown) {
     // G-KS-C7 FIX: Handle race condition on concurrent inserts.
     // Between the findOne check and the save, a concurrent request with the same
     // idempotencyKey can insert first, causing MongoDB error code 11000 (duplicate key).
     // Treat this as an idempotent success — fetch and return the existing record.
-    if (err?.code === 11000 || err?.writeError?.code === 11000) {
+    const mongoError = err as { code?: number; writeError?: { code?: number } };
+    if (mongoError?.code === 11000 || mongoError?.writeError?.code === 11000) {
       logger.info('[EarnRecordService] Concurrent insert detected — returning existing record', {
         idempotencyKey,
         userId,

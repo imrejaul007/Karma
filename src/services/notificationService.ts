@@ -135,10 +135,12 @@ async function sendPushNotification(payload: PushNotificationPayload): Promise<b
     });
 
     return response.data.success === 1;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const axiosError = error as { response?: { data?: unknown }; message?: string };
     logger.error('[PushNotification] FCM send failed', {
       token: payload.token.slice(0, 10) + '...',
-      error: error?.response?.data || error?.message,
+      error: axiosError.response?.data || errorMessage,
     });
     return false;
   }

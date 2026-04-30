@@ -6,7 +6,7 @@
 import { logger } from '../config/logger.js';
 import { NBKCMembership, GreenScoreProfile, CivicMission, CivicMissionEnrollment } from '../models/index.js';
 import { KarmaProfile } from '../models/KarmaProfile.js';
-import type { NBKCMembershipTier, GreenActionType, ICivicMission } from '../models/index.js';
+import type { NBKCMembershipTier, GreenActionType, ICivicMission, IBadge } from '../models/index.js';
 import { sendToUser } from './notificationService.js';
 import { emitKarmaAwardedEvent } from '../utils/gamificationBridge.js';
 
@@ -449,13 +449,13 @@ async function checkAndUpgradeMembership(userId: string) {
 
 // ─── Badges ──────────────────────────────────────────────────────────────────
 
-async function checkNBKCBadges(userId: string, mission: any) {
+async function checkNBKCBadges(userId: string, mission: ICivicMission) {
   const { Types } = require('mongoose');
   const membership = await NBKCMembership.findOne({ userId: new Types.ObjectId(userId) });
   const karmaProfile = await KarmaProfile.findOne({ userId: new Types.ObjectId(userId) });
   if (!karmaProfile) return;
 
-  const earnedIds = new Set(karmaProfile.badges.map((b: any) => b.id));
+  const earnedIds = new Set(karmaProfile.badges.map((b: IBadge) => b.id));
   const now = new Date();
 
   const badgeMissions = membership?.missionsCompleted ?? 0;

@@ -347,11 +347,12 @@ export async function recordKarmaEarned(
       isCheckIn: true,
       isApproved: true,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
     logger.error('recordKarmaEarned: addKarma failed', {
       userId,
       karmaEarned,
-      error: err.message,
+      error: errorMessage,
     });
     throw err;
   }

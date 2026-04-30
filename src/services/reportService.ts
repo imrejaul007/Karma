@@ -16,6 +16,7 @@ import { EarnRecord } from '../models/EarnRecord.js';
 import { computeKarmaScore, getBandMetadata } from '../engines/karmaScoreEngine.js';
 import { getConversionRate } from '../engines/karmaEngine.js';
 import { logger } from '../config/logger.js';
+import type { IBadge } from '../models/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -161,7 +162,7 @@ async function gatherReportData(userId: string, userName: string): Promise<Repor
     scoreBand,
     bandLabel,
     percentile,
-    badges: (profile.badges ?? []).map((b: any) => ({
+    badges: (profile.badges ?? []).map((b: IBadge) => ({
       id: b.id ?? '',
       name: b.name ?? '',
       icon: b.icon ?? '',

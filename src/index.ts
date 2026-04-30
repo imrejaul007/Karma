@@ -2,7 +2,18 @@ import 'dotenv/config';
 
 process.env.SERVICE_NAME = 'rez-karma-service';
 
+import * as Sentry from '@sentry/node';
+import { expressIntegration, setupExpressErrorHandler } from '@sentry/node';
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  integrations: [expressIntegration()],
+  environment: process.env.NODE_ENV || 'development',
+});
+
 import express from 'express';
+import client from 'prom-client';
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
 import cors from 'cors';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
@@ -128,6 +139,12 @@ app.get('/health', async (_req, res) => {
 
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
+// ── Prometheus Metrics ─────────────────────────────────────────────────────────
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/', routes);
 app.use('/api/karma', karmaRoutes);
@@ -143,7 +160,10 @@ app.use('/api/karma', perkRoutes);
 
 // ── Global Error Handler ─────────────────────────────────────────────────────
 
+setupExpressErrorHandler(app);
+
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  Sentry.captureException(err);
   const message = 'Internal server error';
   logger.error('Unhandled error', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
   res.status(500).json({ success: false, message });
@@ -216,7 +236,11 @@ async function start() {
       markRedisShutdownInitiated();
 
       // XS-CRIT-007 FIX: Stop coin event subscriber before closing Redis connections
-      await stopCoinEventSubscriber().catch(() => {});
+      try {
+        await stopCoinEventSubscriber();
+      } catch (e) {
+        logger.warn('[SHUTDOWN] Error stopping coin event subscriber', { error: e instanceof Error ? e.message : String(e) });
+      }
 
       // HIGH-SEV FIX: Close BullMQ gamification queue before Redis connections
       try {
@@ -226,8 +250,16 @@ async function start() {
         logger.error('[SHUTDOWN] Error closing gamification bridge', { error: e });
       }
 
-      await redis.quit().catch(() => {});
-      await bullmqRedis.quit().catch(() => {});
+      try {
+        await redis.quit();
+      } catch (e) {
+        logger.warn('[SHUTDOWN] Error closing main Redis connection', { error: e instanceof Error ? e.message : String(e) });
+      }
+      try {
+        await bullmqRedis.quit();
+      } catch (e) {
+        logger.warn('[SHUTDOWN] Error closing BullMQ Redis connection', { error: e instanceof Error ? e.message : String(e) });
+      }
       logger.info('[SHUTDOWN] Redis connections closed');
 
       logger.info('[SHUTDOWN] Graceful shutdown complete');

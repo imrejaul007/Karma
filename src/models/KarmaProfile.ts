@@ -8,6 +8,7 @@ export interface KarmaProfileDocument extends Omit<IKarmaProfile, '_id'>, Docume
 export interface IBadge {
   id: string;
   name: string;
+  icon?: string;
   earnedAt: Date;
 }
 

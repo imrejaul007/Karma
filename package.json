@@ -13,6 +13,8 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@rez/shared": "file:../rez-shared",
+    "@rez/shared": "file:../rez-shared",
     "@sentry/node": "^8.0.0",
     "axios": "^1.7.9",
     "bcrypt": "^6.0.0",
@@ -70,6 +72,7 @@
   "overrides": {
     "zod": "^3.23.0",
     "mongoose": "^8.8.0",
+    "@rez/shared": "file:../rez-shared",
     "@sentry/node": "^8.0.0"
   }
 }

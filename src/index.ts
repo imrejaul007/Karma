@@ -17,7 +17,7 @@ const register = new client.Registry();
 client.collectDefaultMetrics({ register });
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
-import { openApiSpec } from '@rez/shared/api-docs';
+import { openApiSpec } from './@rez/shared/api-docs';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import mongoSanitize from 'express-mongo-sanitize';

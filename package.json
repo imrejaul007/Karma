@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@rez/shared": "file:../rez-shared",
-    "@rez/shared": "file:../rez-shared",
     "@sentry/node": "^8.0.0",
     "axios": "^1.7.9",
     "bcrypt": "^6.0.0",
